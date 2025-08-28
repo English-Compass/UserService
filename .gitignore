@@ -89,6 +89,7 @@ secrets/
 *.key
 *.crt
 *.p12
+scripts/
 
 # Docker
 .dockerignore
