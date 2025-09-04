@@ -136,4 +136,48 @@ public class JwtUtil {
         Date expiration = extractExpiration(token);
         return expiration.getTime() - System.currentTimeMillis();
     }
+
+    /**
+     * 사용자 정보가 포함된 JWT 토큰 생성
+     * 
+     * @param providerId 카카오에서 제공하는 고유 ID
+     * @param name 사용자 닉네임
+     * @param userId 데이터베이스 사용자 ID
+     * @param profileImage 프로필 이미지 URL
+     * @return JWT 토큰
+     */
+    public String generateTokenWithUserInfo(String providerId, String name, Long userId, String profileImage) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("providerId", providerId);
+        claims.put("name", name);
+        claims.put("userId", userId);
+        claims.put("profileImage", profileImage);
+        claims.put("provider", "kakao");
+        
+        return createToken(claims, providerId);
+    }
+
+    /**
+     * JWT 토큰에서 providerId 추출
+     */
+    public String extractProviderId(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.get("providerId", String.class);
+    }
+
+    /**
+     * JWT 토큰에서 name 추출
+     */
+    public String extractName(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.get("name", String.class);
+    }
+
+    /**
+     * JWT 토큰에서 profileImage 추출
+     */
+    public String extractProfileImage(String token) {
+        Claims claims = extractAllClaims(token);
+        return claims.get("profileImage", String.class);
+    }
 }

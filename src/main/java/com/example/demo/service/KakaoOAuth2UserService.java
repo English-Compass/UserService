@@ -1,6 +1,7 @@
 package com.example.demo.service;
 
 import com.example.demo.entity.User;
+import com.example.demo.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -14,6 +15,7 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -73,8 +75,8 @@ public class KakaoOAuth2UserService implements OAuth2UserService<OAuth2UserReque
             }
             
         } catch (Exception e) {
-            log.error("카카오 OAuth2 사용자 로드 중 에러 발생", e);
-            OAuth2Error oauth2Error = new OAuth2Error("oauth2_error", "Failed to load OAuth2 user", null);
+            log.error("카카오 OAuth2 사용자 로드 중 에러 발생: {}", e.getMessage(), e);
+            OAuth2Error oauth2Error = new OAuth2Error("oauth2_error", "Failed to load OAuth2 user: " + e.getMessage(), null);
             throw new OAuth2AuthenticationException(oauth2Error, e);
         }
     }
@@ -124,9 +126,23 @@ public class KakaoOAuth2UserService implements OAuth2UserService<OAuth2UserReque
         
         // Spring Security에서 사용할 수 있는 OAuth2User 객체 생성
         log.info("Spring Security OAuth2User 객체 생성 시작");
+        
+        // 사용자 정보를 attributes에 추가
+        Map<String, Object> enhancedAttributes = new HashMap<>(attributes);
+        enhancedAttributes.put("_user_id", user.getUserId());
+        enhancedAttributes.put("_user_name", user.getName());
+        enhancedAttributes.put("_user_profile_image", user.getProfileImage());
+        enhancedAttributes.put("_provider_id", user.getProviderId());
+        
+        log.info("사용자 정보 추가 완료:");
+        log.info("  - _user_id: {}", user.getUserId());
+        log.info("  - _user_name: {}", user.getName());
+        log.info("  - _user_profile_image: {}", user.getProfileImage());
+        log.info("  - _provider_id: {}", user.getProviderId());
+        
         DefaultOAuth2User oauth2UserForSecurity = new DefaultOAuth2User(
             Collections.singleton(new SimpleGrantedAuthority("USER")),
-            attributes,
+            enhancedAttributes,
             "id" // 카카오에서 사용자 식별자로 사용할 속성명
         );
         

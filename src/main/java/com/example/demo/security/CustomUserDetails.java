@@ -42,11 +42,11 @@ public class CustomUserDetails implements UserDetails {
     
     /**
      * Spring Security에서 사용자의 사용자명을 반환
-     * User 엔티티의 name를 사용자명으로 사용
+     * User 엔티티의 name을 사용자명으로 사용
      */
     @Override
     public String getUsername() {
-        return user.getName(); // name 사용자명으로 사용
+        return user.getName(); // name을 사용자명으로 사용
     }
     
     /**

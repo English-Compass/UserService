@@ -5,6 +5,9 @@ import com.example.demo.service.UserService;
 import com.example.demo.service.UserCategoryService;
 import com.example.demo.dto.CategoryRequestDto;
 import com.example.demo.dto.CategoryResponseDto;
+import com.example.demo.dto.UserSettingsResponseDto;
+import com.example.demo.security.CustomUserDetails;
+import com.example.demo.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -45,6 +48,12 @@ public class UserController {
     private final UserCategoryService userCategoryService;
     
     /**
+     * JWT 토큰 생성을 위한 유틸리티
+     * 생성자 주입으로 의존성 주입
+     */
+    private final JwtUtil jwtUtil;
+    
+    /**
      * 현재 로그인한 사용자의 프로필 정보를 조회
      * 
      * @param userDetails Spring Security에서 제공하는 인증된 사용자 정보
@@ -83,26 +92,6 @@ public class UserController {
         }
     }
     
-    /**
-     * 사용자 로그아웃 처리
-     * 
-     * @return 로그아웃 성공 메시지
-     * 
-     * 주의: 이 엔드포인트는 단순히 응답만 반환합니다.
-     * 실제 로그아웃 처리는 Spring Security의 기본 로그아웃 기능을 사용하거나,
-     * 프론트엔드에서 JWT 토큰을 제거하는 방식으로 구현해야 합니다.
-     */
-    @PostMapping("/logout")
-    public ResponseEntity<Map<String, String>> logout() {
-        log.info("User logout requested"); // 로그 기록
-        
-        // Spring Security의 기본 로그아웃 처리
-        // 실제로는 프론트엔드에서 JWT 토큰을 제거하는 로직이 필요
-        
-        Map<String, String> response = new HashMap<>();
-        response.put("message", "Logout successful");
-        return ResponseEntity.ok(response);
-    }
     
     /**
      * 현재 사용자의 인증 상태를 확인
@@ -131,129 +120,7 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
     
-    /**
-     * 사용자 난이도 설정 (테스트용 - 인증 비활성화)
-     * 
-     * @param request 난이도 레벨 (1: 초급, 2: 중급, 3: 고급)
-     * @return 난이도 설정 결과
-     */
-    @PostMapping("/difficulty")
-    public ResponseEntity<Map<String, Object>> setUserDifficulty(
-            @RequestBody Map<String, Integer> request) {
-        
-        try {
-            // TODO: 테스트 완료 후 인증 로직 활성화
-            // @AuthenticationPrincipal UserDetails userDetails
-            // if (userDetails == null) {
-            //     return ResponseEntity.status(401).body(Map.of("error", "User not authenticated"));
-            // }
-            
-            Integer difficultyLevel = request.get("difficultyLevel");
-            if (difficultyLevel == null || difficultyLevel < 1 || difficultyLevel > 3) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Invalid difficulty level. Must be 1, 2, or 3"));
-            }
-            
-            // 테스트용으로 고정된 사용자 ID 사용 (실제로는 userDetails에서 가져와야 함)
-            Long testUserId = 1L; // TODO: 실제 사용자 ID로 변경
-            
-            User updatedUser = userService.setUserDifficultyLevel(testUserId, difficultyLevel);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "Difficulty level updated successfully");
-            response.put("userId", updatedUser.getUserId());
-            response.put("difficultyLevel", updatedUser.getDifficultyLevel());
-            
-            log.info("User difficulty updated: userId={}, level={}", updatedUser.getUserId(), updatedUser.getDifficultyLevel());
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            log.error("Error setting user difficulty", e);
-            return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
-        }
-    }
     
-    /**
-     * 사용자 난이도 조회 (테스트용 - 인증 비활성화)
-     * 
-     * @return 사용자 난이도 정보
-     */
-    @GetMapping("/difficulty")
-    public ResponseEntity<Map<String, Object>> getUserDifficulty() {
-        try {
-            // TODO: 테스트 완료 후 인증 로직 활성화
-            // @AuthenticationPrincipal UserDetails userDetails
-            // if (userDetails == null) {
-            //     return ResponseEntity.status(401).body(Map.of("error", "User not authenticated"));
-            // }
-            
-            // 테스트용으로 고정된 사용자 ID 사용 (실제로는 userDetails에서 가져와야 함)
-            Long testUserId = 1L; // TODO: 실제 사용자 ID로 변경
-            
-            Integer difficultyLevel = userService.getUserDifficultyLevel(testUserId);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("userId", testUserId);
-            response.put("difficultyLevel", difficultyLevel);
-            
-            log.info("User difficulty retrieved: userId={}, level={}", testUserId, difficultyLevel);
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            log.error("Error getting user difficulty", e);
-            return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
-        }
-    }
-    
-    /**
-     * 사용자 카테고리 저장 (테스트용 - 인증 비활성화)
-     * 
-     * @param categoryRequest 카테고리 요청 DTO
-     * @return 카테고리 저장 결과
-     */
-    @PostMapping("/categories")
-    public ResponseEntity<CategoryResponseDto> saveUserCategories(
-            @RequestBody CategoryRequestDto categoryRequest) {
-        
-        try {
-            // DTO 유효성 검사
-            if (!categoryRequest.isValid()) {
-                return ResponseEntity.badRequest()
-                    .body(CategoryResponseDto.failure("유효하지 않은 카테고리 데이터입니다."));
-            }
-            
-            // TODO: 테스트 완료 후 인증 로직 활성화
-            // @AuthenticationPrincipal UserDetails userDetails
-            // if (userDetails == null) {
-            //     return ResponseEntity.status(401).body(CategoryResponseDto.failure("User not authenticated"));
-            // }
-            
-            // 테스트용으로 고정된 사용자 ID 사용 (실제로는 userDetails에서 가져와야 함)
-            Long testUserId = 1L; // TODO: 실제 사용자 ID로 변경
-            
-            // CategoryRequestDto를 UserCategoryService에서 기대하는 형태로 변환
-            Map<String, java.util.List<String>> categories = new HashMap<>();
-            categoryRequest.getCategories().forEach((majorCategory, minorCategories) -> {
-                List<String> minorCategoryStrings = minorCategories.stream()
-                    .map(Enum::name)
-                    .collect(java.util.stream.Collectors.toList());
-                categories.put(majorCategory.name(), minorCategoryStrings);
-            });
-            
-            var savedCategories = userCategoryService.saveUserCategories(testUserId, categories);
-            
-            // CategoryResponseDto로 응답 생성
-            CategoryResponseDto response = CategoryResponseDto.success(testUserId, categoryRequest.getCategories());
-            response.setMessage("카테고리가 성공적으로 저장되었습니다. (저장된 개수: " + savedCategories.size() + ")");
-            
-            log.info("User categories saved: userId={}, count={}", testUserId, savedCategories.size());
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            log.error("Error saving user categories", e);
-            return ResponseEntity.status(500)
-                .body(CategoryResponseDto.failure("카테고리 저장 중 오류가 발생했습니다: " + e.getMessage()));
-        }
-    }
     
     /**
      * 사용자 카테고리 조회
@@ -268,16 +135,29 @@ public class UserController {
                 return ResponseEntity.status(401).body(Map.of("error", "User not authenticated"));
             }
             
-            User user = userService.findByProviderId(userDetails.getUsername())
-                    .orElseThrow(() -> new RuntimeException("User not found"));
+            // JWT 인증된 사용자의 경우 CustomUserDetails에서 직접 userId 가져오기
+            Long userId;
+            User user;
             
-            Map<String, java.util.List<String>> categories = userCategoryService.getUserCategories(user.getUserId());
+            if (userDetails instanceof CustomUserDetails) {
+                CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
+                userId = customUserDetails.getUserId();
+                user = customUserDetails.getUser();
+            } else {
+                // OAuth2 인증된 사용자의 경우 providerId로 조회
+                user = userService.findByProviderId(userDetails.getUsername())
+                        .orElseThrow(() -> new RuntimeException("User not found"));
+                userId = user.getUserId();
+            }
+            
+            // userId를 통해 카테고리 정보 조회
+            Map<String, java.util.List<String>> categories = userCategoryService.getUserCategories(userId);
             
             Map<String, Object> response = new HashMap<>();
-            response.put("userId", user.getUserId());
+            response.put("userId", userId);
             response.put("categories", categories);
             
-            log.info("User categories retrieved: userId={}, count={}", user.getUserId(), categories.size());
+            log.info("User categories retrieved: userId={}, count={}", userId, categories.size());
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
@@ -287,10 +167,10 @@ public class UserController {
     }
     
     /**
-     * 사용자 설정 정보 조회 (난이도 + 카테고리)
+     * 사용자 설정 정보 조회
      * 
      * @param userDetails Spring Security에서 제공하는 인증된 사용자 정보
-     * @return 사용자 설정 정보
+     * @return 사용자 설정 정보 (프로필, 난이도, 카테고리)
      */
     @GetMapping("/settings")
     public ResponseEntity<Map<String, Object>> getUserSettings(@AuthenticationPrincipal UserDetails userDetails) {
@@ -299,24 +179,255 @@ public class UserController {
                 return ResponseEntity.status(401).body(Map.of("error", "User not authenticated"));
             }
             
-            User user = userService.findByProviderId(userDetails.getUsername())
-                    .orElseThrow(() -> new RuntimeException("User not found"));
+            // JWT 인증된 사용자의 경우 CustomUserDetails에서 직접 userId 가져오기
+            Long userId;
+            User user;
             
-            Integer difficultyLevel = userService.getUserDifficultyLevel(user.getUserId());
-            Map<String, java.util.List<String>> categories = userCategoryService.getUserCategories(user.getUserId());
+            if (userDetails instanceof CustomUserDetails) {
+                CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
+                userId = customUserDetails.getUserId();
+                user = customUserDetails.getUser();
+            } else {
+                // OAuth2 인증된 사용자의 경우 providerId로 조회
+                user = userService.findByProviderId(userDetails.getUsername())
+                        .orElseThrow(() -> new RuntimeException("User not found"));
+                userId = user.getUserId();
+            }
             
-            Map<String, Object> response = new HashMap<>();
-            response.put("userId", user.getUserId());
-            response.put("difficultyLevel", difficultyLevel);
-            response.put("categories", categories);
+            // userId를 통해 사용자 설정 정보 조회
+            UserSettingsResponseDto settingsResponse = userService.getUserSettings(userId);
             
-            log.info("User settings retrieved: userId={}, difficulty={}, categories={}", 
-                    user.getUserId(), difficultyLevel, categories.size());
-            return ResponseEntity.ok(response);
+            // userId를 통해 카테고리 정보 조회
+            Map<String, java.util.List<String>> categories = userCategoryService.getUserCategories(userId);
+            settingsResponse.addData("categories", categories);
+            
+            log.info("User settings retrieved: userId={}, name={}, difficultyLevel={}", 
+                    userId, user.getName(), user.getDifficultyLevel());
+            
+            return ResponseEntity.ok(settingsResponse.toMap());
             
         } catch (Exception e) {
             log.error("Error getting user settings", e);
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
         }
     }
+    
+    /**
+     * 사용자 난이도 설정 (별도 엔드포인트)
+     * 
+     * @param userDetails Spring Security에서 제공하는 인증된 사용자 정보
+     * @param request 난이도 레벨
+     * @return 설정 결과
+     */
+    @PostMapping("/settings/difficulty")
+    public ResponseEntity<Map<String, Object>> setUserDifficulty(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody Map<String, Integer> request) {
+        
+        try {
+            if (userDetails == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "User not authenticated"));
+            }
+            
+            // JWT 인증된 사용자의 경우 CustomUserDetails에서 직접 userId 가져오기
+            Long userId;
+            User user;
+            
+            if (userDetails instanceof CustomUserDetails) {
+                CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
+                userId = customUserDetails.getUserId();
+                user = customUserDetails.getUser();
+            } else {
+                // OAuth2 인증된 사용자의 경우 providerId로 조회
+                user = userService.findByProviderId(userDetails.getUsername())
+                        .orElseThrow(() -> new RuntimeException("User not found"));
+                userId = user.getUserId();
+            }
+            
+            Integer difficultyLevel = request.get("difficultyLevel");
+            if (difficultyLevel == null || difficultyLevel < 1 || difficultyLevel > 3) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Invalid difficulty level. Must be 1, 2, or 3"));
+            }
+            
+            // userId를 통해 난이도 설정
+            User updatedUser = userService.setUserDifficultyLevel(userId, difficultyLevel);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "난이도 레벨이 성공적으로 설정되었습니다");
+            response.put("userId", userId);
+            response.put("difficultyLevel", updatedUser.getDifficultyLevel());
+            
+            log.info("User difficulty set: userId={}, level={}", userId, updatedUser.getDifficultyLevel());
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("Error setting user difficulty", e);
+            return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
+        }
+    }
+    
+    /**
+     * 사용자 카테고리 설정 (별도 엔드포인트)
+     * 
+     * @param userDetails Spring Security에서 제공하는 인증된 사용자 정보
+     * @param request 카테고리 정보
+     * @return 설정 결과
+     */
+    @PostMapping("/settings/categories")
+    public ResponseEntity<Map<String, Object>> setUserCategories(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody Map<String, Object> request) {
+        
+        try {
+            if (userDetails == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "User not authenticated"));
+            }
+            
+            // JWT 인증된 사용자의 경우 CustomUserDetails에서 직접 userId 가져오기
+            Long userId;
+            User user;
+            
+            if (userDetails instanceof CustomUserDetails) {
+                CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
+                userId = customUserDetails.getUserId();
+                user = customUserDetails.getUser();
+            } else {
+                // OAuth2 인증된 사용자의 경우 providerId로 조회
+                user = userService.findByProviderId(userDetails.getUsername())
+                        .orElseThrow(() -> new RuntimeException("User not found"));
+                userId = user.getUserId();
+            }
+            
+            @SuppressWarnings("unchecked")
+            Map<String, List<String>> categories = (Map<String, List<String>>) request.get("categories");
+            
+            if (categories == null || categories.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Categories are required"));
+            }
+            
+            // userId를 통해 카테고리 설정
+            userCategoryService.saveUserCategories(userId, categories);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "카테고리가 성공적으로 설정되었습니다");
+            response.put("userId", userId);
+            response.put("categories", categories);
+            
+            log.info("User categories set: userId={}, categories={}", userId, categories);
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("Error setting user categories", e);
+            return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
+        }
+    }
+    
+    /**
+     * 사용자 초기 설정 완료 여부 조회
+     * 
+     * @param token JWT 토큰
+     * @return 사용자 설정 완료 여부
+     */
+    @GetMapping("/settings/status")
+    public ResponseEntity<?> getUserSetupStatus(
+            @RequestHeader("Authorization") String token) {
+        
+        try {
+            // JWT 토큰 검증
+            if (token == null || !token.startsWith("Bearer ")) {
+                return ResponseEntity.status(401).body(Map.of("error", "Invalid token format"));
+            }
+            
+            String jwt = token.substring(7);
+            
+            // JWT 토큰에서 사용자 정보 추출
+            String providerId = jwtUtil.extractProviderId(jwt);
+            String name = jwtUtil.extractName(jwt);
+            String profileImage = jwtUtil.extractProfileImage(jwt);
+            Long userId = jwtUtil.extractUserId(jwt);
+            
+            if (providerId == null || userId == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "Invalid token"));
+            }
+            
+            // providerId로 사용자 조회 (검증용)
+            User user = userService.findByProviderId(providerId)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+            
+            // 사용자 초기 설정 완료 여부 확인
+            boolean hasCompletedSetup = false;
+            
+            // 1. 난이도 설정 확인
+            if (user.getDifficultyLevel() != null) {
+                // 2. 카테고리 설정 확인
+                var categories = userCategoryService.getUserCategories(userId);
+                if (categories != null && !categories.isEmpty()) {
+                    hasCompletedSetup = true;
+                }
+            }
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("hasCompletedSetup", hasCompletedSetup);
+            response.put("userId", userId);
+            response.put("name", name != null ? name : user.getName());
+            response.put("profileImage", profileImage != null ? profileImage : user.getProfileImage());
+            
+            log.info("User setup status checked: userId={}, hasCompletedSetup={}", userId, hasCompletedSetup);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("Error checking user setup status", e);
+            return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
+        }
+    }
+    
+    /**
+     * JWT 토큰에서 사용자 정보 추출 (프론트엔드용)
+     * 
+     * @param token JWT 토큰
+     * @return JWT 토큰에 포함된 사용자 정보
+     */
+    @GetMapping("/token/info")
+    public ResponseEntity<?> getTokenInfo(
+            @RequestHeader("Authorization") String token) {
+        
+        try {
+            // JWT 토큰 검증
+            if (token == null || !token.startsWith("Bearer ")) {
+                return ResponseEntity.status(401).body(Map.of("error", "Invalid token format"));
+            }
+            
+            String jwt = token.substring(7);
+            
+            // JWT 토큰 유효성 검증
+            if (!jwtUtil.validateToken(jwt)) {
+                return ResponseEntity.status(401).body(Map.of("error", "Invalid or expired token"));
+            }
+            
+            // JWT 토큰에서 사용자 정보 추출
+            String providerId = jwtUtil.extractProviderId(jwt);
+            String name = jwtUtil.extractName(jwt);
+            String profileImage = jwtUtil.extractProfileImage(jwt);
+            Long userId = jwtUtil.extractUserId(jwt);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("userId", userId);
+            response.put("name", name);
+            response.put("profileImage", profileImage);
+            response.put("providerId", providerId);
+            
+            log.info("Token info extracted: userId={}, name={}", userId, name);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("Error extracting token info", e);
+            return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
+        }
+    }
+    
+    
 }

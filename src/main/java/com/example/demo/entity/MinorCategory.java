@@ -7,6 +7,7 @@ package com.example.demo.entity;
 public enum MinorCategory {
     
     // 학습 관련
+    
     CLASS_LISTENING("수업 듣기"),
     DEPARTMENT_CONVERSATION("학과 대화"),
     ASSIGNMENT_EXAM("과제/시험"),

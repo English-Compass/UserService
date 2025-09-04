@@ -1,5 +1,6 @@
 package com.example.demo.service;
 
+import com.example.demo.dto.UserSettingsResponseDto;
 import com.example.demo.entity.User;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.security.CustomUserDetails;
@@ -36,6 +37,8 @@ public class UserService implements UserDetailsService {
      */
     private final UserRepository userRepository;
     
+    
+    
     /**
      * Spring Security에서 사용자 인증 시 호출되는 메서드
      * providerId를 사용하여 사용자 정보를 로드
@@ -62,6 +65,17 @@ public class UserService implements UserDetailsService {
     @Transactional(readOnly = true) // 읽기 전용 트랜잭션으로 성능 최적화
     public Optional<User> findByProviderId(String providerId) {
         return userRepository.findByProviderId(providerId);
+    }
+    
+    /**
+     * 사용자 ID로 사용자를 검색
+     * 
+     * @param userId 사용자 ID
+     * @return 사용자 정보를 담은 Optional (사용자가 없으면 빈 Optional)
+     */
+    @Transactional(readOnly = true) // 읽기 전용 트랜잭션으로 성능 최적화
+    public Optional<User> findById(Long userId) {
+        return userRepository.findById(userId);
     }
     
     /**
@@ -190,5 +204,33 @@ public class UserService implements UserDetailsService {
         
         log.info("사용자 난이도 초기화 완료: userId={}, level=2", userId);
         return updatedUser;
+    }
+    
+    /**
+     * 사용자 설정 정보 조회
+     * 
+     * @param userId 사용자 ID
+     * @return 사용자 설정 정보 응답 DTO
+     */
+    @Transactional(readOnly = true)
+    public UserSettingsResponseDto getUserSettings(Long userId) {
+        log.info("사용자 설정 정보 조회: userId={}", userId);
+        
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userId));
+        
+        UserSettingsResponseDto response = UserSettingsResponseDto.success(
+                user.getUserId(),
+                user.getName(),
+                user.getProfileImage(),
+                user.getDifficultyLevel(),
+                user.getCreatedAt(),
+                user.getUpdatedAt()
+        );
+        
+        log.info("사용자 설정 정보 조회 완료: userId={}, name={}, difficultyLevel={}", 
+                userId, user.getName(), user.getDifficultyLevel());
+        
+        return response;
     }
 }

@@ -1,6 +1,9 @@
 package com.example.demo.config;
 
 import com.example.demo.service.KakaoOAuth2UserService;
+import com.example.demo.service.UserService;
+import com.example.demo.service.UserCategoryService;
+import com.example.demo.entity.User;
 import com.example.demo.util.JwtUtil;
 import com.example.demo.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +22,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Spring Security 설정 클래스
@@ -46,6 +51,18 @@ public class SecurityConfig {
      * 생성자 주입으로 의존성 주입
      */
     private final KakaoOAuth2UserService oauth2UserService;
+    
+    /**
+     * 사용자 관련 비즈니스 로직을 처리하는 서비스
+     * 생성자 주입으로 의존성 주입
+     */
+    private final UserService userService;
+    
+    /**
+     * 사용자 카테고리 관련 비즈니스 로직을 처리하는 서비스
+     * 생성자 주입으로 의존성 주입
+     */
+    private final UserCategoryService userCategoryService;
     
     /**
      * JWT 토큰 생성을 위한 유틸리티
@@ -100,26 +117,71 @@ public class SecurityConfig {
                         log.info("=== OAuth2 로그인 성공 핸들러 실행 ===");
                         log.info("인증된 사용자: {}", authentication.getName());
                         
-                        // JWT 토큰 생성 - Authentication에서 providerId와 name 추출
-                        String providerId = authentication.getName(); // providerId
-                        String name = authentication.getName(); // 기본값으로 providerId 사용
+                        // OAuth2User에서 실제 사용자 정보 가져오기
+                        String providerId = authentication.getName(); // 기본값
+                        String username = "Unknown"; // 기본값
+                        String profileImage = "default_profile.jpg"; // 기본값
+                        Long userId = null;
                         
-                        // CustomUserDetails에서 실제 사용자 정보 가져오기
-                        if (authentication.getPrincipal() instanceof com.example.demo.security.CustomUserDetails) {
-                            com.example.demo.security.CustomUserDetails userDetails = 
-                                (com.example.demo.security.CustomUserDetails) authentication.getPrincipal();
-                            name = userDetails.getUsername(); // 사용자 이름
+                        log.info("Authentication principal type: {}", authentication.getPrincipal().getClass().getName());
+                        
+                        if (authentication.getPrincipal() instanceof org.springframework.security.oauth2.core.user.OAuth2User) {
+                            org.springframework.security.oauth2.core.user.OAuth2User oauth2User = 
+                                (org.springframework.security.oauth2.core.user.OAuth2User) authentication.getPrincipal();
+                            
+                            // OAuth2User의 모든 attributes 로깅
+                            log.info("OAuth2User attributes 전체: {}", oauth2User.getAttributes());
+                            
+                            // KakaoOAuth2UserService에서 추가한 사용자 정보 가져오기
+                            userId = (Long) oauth2User.getAttributes().get("_user_id");
+                            username = (String) oauth2User.getAttributes().get("_user_name");
+                            profileImage = (String) oauth2User.getAttributes().get("_user_profile_image");
+                            providerId = (String) oauth2User.getAttributes().get("_provider_id");
+                            
+                            log.info("OAuth2User에서 정보 추출: userId={}, username={}, profileImage={}, providerId={}", 
+                                    userId, username, profileImage, providerId);
+                        } else {
+                            log.warn("OAuth2User가 아닌 타입: {}", authentication.getPrincipal().getClass().getName());
                         }
                         
-                        String token = jwtUtil.generateToken(providerId, name);
+                        String token = jwtUtil.generateTokenWithUserInfo(providerId, username, userId, profileImage);
                         log.info("JWT 토큰 생성 완료: {}", token.substring(0, Math.min(token.length(), 50)) + "...");
                         
-                        // JWT 토큰을 쿼리 파라미터로 홈으로 리다이렉트
-                        String redirectUrl = "/?token=" + token;
+                        // JWT 토큰과 사용자 정보를 쿼리 파라미터로 프론트엔드로 리다이렉트 (URL 인코딩 적용)
+                        String encodedToken = URLEncoder.encode(token, StandardCharsets.UTF_8);
+                        String encodedUsername = URLEncoder.encode(username != null ? username : "Unknown", StandardCharsets.UTF_8);
+                        String encodedProfileImage = URLEncoder.encode(profileImage != null ? profileImage : "default_profile.jpg", StandardCharsets.UTF_8);
+                        
+                        // 사용자 설정 완료 여부에 따라 리다이렉트 URL 결정
+                        String baseUrl = "http://localhost:5173/";
+                        String redirectUrl;
+                        
+                        if (userId != null) {
+                            // 기존 사용자 - dashboard/home으로 리다이렉트
+                            redirectUrl = baseUrl + "dashboard/home?token=" + encodedToken + 
+                                        "&userId=" + userId + 
+                                        "&username=" + encodedUsername + 
+                                        "&profileImage=" + encodedProfileImage;
+                            log.info("기존 사용자 - dashboard/home으로 리다이렉트");
+                        } else {
+                            // 새로운 사용자 - add-info로 리다이렉트
+                            redirectUrl = baseUrl + "add-info?token=" + encodedToken + 
+                                        "&userId=null" + 
+                                        "&username=" + encodedUsername + 
+                                        "&profileImage=" + encodedProfileImage;
+                            log.info("새로운 사용자 - add-info로 리다이렉트");
+                        }
+                        
+                        log.info("프론트엔드로 리다이렉트 시작: {}", redirectUrl);
                         response.sendRedirect(redirectUrl);
+                        log.info("프론트엔드로 리다이렉트 완료");
                     }
                 })
-                .failureUrl("/auth/login/failure") // 로그인 실패 시 /auth/login/failure로 리다이렉트
+                .failureHandler((request, response, exception) -> {
+                    log.error("OAuth2 로그인 실패: {}", exception.getMessage());
+                    String redirectUrl = "http://localhost:5173/?login=error&message=" + URLEncoder.encode(exception.getMessage(), StandardCharsets.UTF_8);
+                    response.sendRedirect(redirectUrl);
+                })
             )
             
             // URL별 접근 권한 설정
@@ -131,8 +193,10 @@ public class SecurityConfig {
                 // 인증 관련 URL은 공개 접근 가능
                 .requestMatchers("/auth/**").permitAll()
                 // 테스트용 사용자 API는 공개 접근 가능 (TODO: 테스트 완료 후 인증 필요로 변경)
-                .requestMatchers("/user/difficulty").permitAll()
-                .requestMatchers("/user/categories").permitAll()
+                .requestMatchers("/user/settings/difficulty").permitAll()
+                .requestMatchers("/user/settings/categories").permitAll()
+                .requestMatchers("/user/settings/status").permitAll()
+                .requestMatchers("/user/token/info").permitAll()
                 // 기타 사용자 관련 URL은 인증 필요
                 .requestMatchers("/user/**").authenticated()
                 // 그 외 모든 요청은 인증 필요
