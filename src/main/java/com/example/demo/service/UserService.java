@@ -37,6 +37,12 @@ public class UserService implements UserDetailsService {
      */
     private final UserRepository userRepository;
     
+    /**
+     * 사용자 정보 캐싱을 위한 서비스
+     * 생성자 주입으로 의존성 주입
+     */
+    private final UserCacheService userCacheService;
+    
     
     
     /**
@@ -163,12 +169,16 @@ public class UserService implements UserDetailsService {
         user.setDifficultyLevel(difficultyLevel);
         User updatedUser = userRepository.save(user);
         
+        // 캐시 업데이트
+        userCacheService.cacheUserDifficulty(userId, difficultyLevel);
+        
         log.info("사용자 난이도 설정 완료: userId={}, level={}", userId, difficultyLevel);
         return updatedUser;
     }
     
     /**
      * 사용자 난이도 조회
+     * 캐시 우선 조회: Redis 캐시에서 먼저 조회하고, 없으면 DB에서 조회 후 캐시에 저장
      * 
      * @param userId 사용자 ID
      * @return 난이도 레벨 (1, 2, 3)
@@ -177,12 +187,26 @@ public class UserService implements UserDetailsService {
     public Integer getUserDifficultyLevel(Long userId) {
         log.info("사용자 난이도 조회: userId={}", userId);
         
+        // 1. 캐시에서 먼저 조회
+        Integer cachedDifficulty = userCacheService.getUserDifficulty(userId);
+        if (cachedDifficulty != null) {
+            log.info("✅ [CACHE] Returning difficulty from cache: userId={}, level={}", userId, cachedDifficulty);
+            return cachedDifficulty;
+        }
+        
+        // 2. 캐시 미스 시 DB 조회
+        log.info("❌ [DB] Cache miss - fetching difficulty from database: userId={}", userId);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userId));
         
         Integer difficultyLevel = user.getDifficultyLevel();
-        log.info("사용자 난이도 조회 완료: userId={}, level={}", userId, difficultyLevel);
         
+        // 3. DB 조회 결과를 캐시에 저장
+        if (difficultyLevel != null) {
+            userCacheService.cacheUserDifficulty(userId, difficultyLevel);
+        }
+        
+        log.info("사용자 난이도 조회 완료: userId={}, level={}", userId, difficultyLevel);
         return difficultyLevel;
     }
     
@@ -201,6 +225,9 @@ public class UserService implements UserDetailsService {
         
         user.setDifficultyLevel(2); // 기본값: 중급
         User updatedUser = userRepository.save(user);
+        
+        // 캐시 업데이트
+        userCacheService.cacheUserDifficulty(userId, 2);
         
         log.info("사용자 난이도 초기화 완료: userId={}, level=2", userId);
         return updatedUser;

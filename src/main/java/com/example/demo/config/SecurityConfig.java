@@ -8,6 +8,7 @@ import com.example.demo.util.JwtUtil;
 import com.example.demo.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -69,6 +70,13 @@ public class SecurityConfig {
      * 생성자 주입으로 의존성 주입
      */
     private final JwtUtil jwtUtil;
+    
+    /**
+     * 프론트엔드 기본 URL (환경변수로 설정 가능)
+     * 기본값: http://localhost:5173/
+     */
+    @Value("${FRONTEND_BASE_URL:http://localhost:5173/}")
+    private String frontendBaseUrl;
     
     /**
      * Spring Security 필터 체인 설정
@@ -153,7 +161,7 @@ public class SecurityConfig {
                         String encodedProfileImage = URLEncoder.encode(profileImage != null ? profileImage : "default_profile.jpg", StandardCharsets.UTF_8);
                         
                         // 사용자 설정 완료 여부에 따라 리다이렉트 URL 결정
-                        String baseUrl = "http://localhost:5173/";
+                        String baseUrl = frontendBaseUrl.endsWith("/") ? frontendBaseUrl : frontendBaseUrl + "/";
                         String redirectUrl;
                         
                         if (userId != null) {
@@ -179,7 +187,8 @@ public class SecurityConfig {
                 })
                 .failureHandler((request, response, exception) -> {
                     log.error("OAuth2 로그인 실패: {}", exception.getMessage());
-                    String redirectUrl = "http://localhost:5173/?login=error&message=" + URLEncoder.encode(exception.getMessage(), StandardCharsets.UTF_8);
+                    String baseUrl = frontendBaseUrl.endsWith("/") ? frontendBaseUrl : frontendBaseUrl + "/";
+                    String redirectUrl = baseUrl + "?login=error&message=" + URLEncoder.encode(exception.getMessage(), StandardCharsets.UTF_8);
                     response.sendRedirect(redirectUrl);
                 })
             )
@@ -192,6 +201,8 @@ public class SecurityConfig {
                 .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                 // 인증 관련 URL은 공개 접근 가능
                 .requestMatchers("/auth/**").permitAll()
+                // 에러 페이지는 공개 접근 가능 (리다이렉션 루프 방지)
+                .requestMatchers("/error").permitAll()
                 // 테스트용 사용자 API는 공개 접근 가능 (TODO: 테스트 완료 후 인증 필요로 변경)
                 .requestMatchers("/user/settings/difficulty").permitAll()
                 .requestMatchers("/user/settings/categories").permitAll()

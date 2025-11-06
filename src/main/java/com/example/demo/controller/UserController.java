@@ -1,11 +1,10 @@
 package com.example.demo.controller;
 
 import com.example.demo.entity.User;
+import com.example.demo.dto.UserSettingsResponseDto;
 import com.example.demo.service.UserService;
 import com.example.demo.service.UserCategoryService;
-import com.example.demo.dto.CategoryRequestDto;
-import com.example.demo.dto.CategoryResponseDto;
-import com.example.demo.dto.UserSettingsResponseDto;
+import com.example.demo.service.UserCacheService;
 import com.example.demo.security.CustomUserDetails;
 import com.example.demo.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +51,12 @@ public class UserController {
      * 생성자 주입으로 의존성 주입
      */
     private final JwtUtil jwtUtil;
+    
+    /**
+     * 사용자 정보 캐싱을 위한 서비스
+     * 생성자 주입으로 의존성 주입
+     */
+    private final UserCacheService userCacheService;
     
     /**
      * 현재 로그인한 사용자의 프로필 정보를 조회
@@ -268,24 +273,24 @@ public class UserController {
     }
     
     /**
-     * 사용자 카테고리 설정 (별도 엔드포인트)
+     * 사용자 카테고리 설정 (전체 교체 - PUT 사용)
      * 
      * @param userDetails Spring Security에서 제공하는 인증된 사용자 정보
      * @param request 카테고리 정보
      * @return 설정 결과
      */
-    @PostMapping("/settings/categories")
+    @PutMapping("/settings/categories")
     public ResponseEntity<Map<String, Object>> setUserCategories(
             @AuthenticationPrincipal UserDetails userDetails,
             @RequestBody Map<String, Object> request) {
         
+        Long userId = null;
         try {
             if (userDetails == null) {
                 return ResponseEntity.status(401).body(Map.of("error", "User not authenticated"));
             }
             
             // JWT 인증된 사용자의 경우 CustomUserDetails에서 직접 userId 가져오기
-            Long userId;
             User user;
             
             if (userDetails instanceof CustomUserDetails) {
@@ -299,12 +304,17 @@ public class UserController {
                 userId = user.getUserId();
             }
             
+            log.info("Received category request: userId={}, request={}", userId, request);
+            
             @SuppressWarnings("unchecked")
             Map<String, List<String>> categories = (Map<String, List<String>>) request.get("categories");
             
             if (categories == null || categories.isEmpty()) {
+                log.warn("Categories are null or empty for userId={}", userId);
                 return ResponseEntity.badRequest().body(Map.of("error", "Categories are required"));
             }
+            
+            log.info("Processing categories: userId={}, categories={}", userId, categories);
             
             // userId를 통해 카테고리 설정
             userCategoryService.saveUserCategories(userId, categories);
@@ -318,9 +328,12 @@ public class UserController {
             log.info("User categories set: userId={}, categories={}", userId, categories);
             return ResponseEntity.ok(response);
             
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid category data: userId={}, error={}", userId != null ? userId : "unknown", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
-            log.error("Error setting user categories", e);
-            return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
+            log.error("Error setting user categories: userId={}, error={}", userId != null ? userId : "unknown", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", "Internal server error: " + e.getMessage()));
         }
     }
     
@@ -425,6 +438,57 @@ public class UserController {
             
         } catch (Exception e) {
             log.error("Error extracting token info", e);
+            return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
+        }
+    }
+    
+    /**
+     * 사용자 캐시 상태 확인 (디버깅용)
+     * 
+     * @param userDetails Spring Security에서 제공하는 인증된 사용자 정보
+     * @return 캐시 상태 정보
+     */
+    @GetMapping("/cache/status")
+    public ResponseEntity<Map<String, Object>> getCacheStatus(@AuthenticationPrincipal UserDetails userDetails) {
+        try {
+            if (userDetails == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "User not authenticated"));
+            }
+            
+            Long userId;
+            if (userDetails instanceof CustomUserDetails) {
+                CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
+                userId = customUserDetails.getUserId();
+            } else {
+                User user = userService.findByProviderId(userDetails.getUsername())
+                        .orElseThrow(() -> new RuntimeException("User not found"));
+                userId = user.getUserId();
+            }
+            
+            // 캐시에서 직접 조회
+            Integer cachedDifficulty = userCacheService.getUserDifficulty(userId);
+            Map<String, List<String>> cachedCategories = userCacheService.getUserCategories(userId);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("userId", userId);
+            response.put("cacheStatus", Map.of(
+                "difficulty", Map.of(
+                    "cached", cachedDifficulty != null,
+                    "value", cachedDifficulty != null ? cachedDifficulty : "null"
+                ),
+                "categories", Map.of(
+                    "cached", cachedCategories != null,
+                    "count", cachedCategories != null ? cachedCategories.size() : 0
+                )
+            ));
+            
+            log.info("Cache status checked: userId={}, difficultyCached={}, categoriesCached={}", 
+                    userId, cachedDifficulty != null, cachedCategories != null);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("Error checking cache status", e);
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
         }
     }

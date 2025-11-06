@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build: .
@@ -7,6 +5,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      # Spring Profile 설정: docker 프로파일 활성화 → application-docker.properties 파일 사용
       - SPRING_PROFILES_ACTIVE=docker
       # MySQL 연결 (db 컨테이너)
       - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/user_service_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
@@ -15,11 +14,11 @@ services:
       # Redis 연결 (redis 컨테이너) - 사용자 세션 및 토큰 캐싱용
       - SPRING_REDIS_HOST=redis
       - SPRING_REDIS_PORT=6379
-      # Kakao OAuth2 설정
-      - KAKAO_CLIENT_ID=${KAKAO_API_KEY_USER_SERVICE:-your-kakao-client-id}
+      # Kakao OAuth2 설정 (로컬 환경변수명과 동일하게 설정)
+      - KAKAO_API_KEY_USER_SERVICE=${KAKAO_API_KEY_USER_SERVICE:-your-kakao-client-id}
       - KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET:-your-kakao-client-secret}
-    secrets:
-      - kakao_client_secret
+      # 프론트엔드 URL 설정 (Docker 환경에서는 Nginx를 통해 접근)
+      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-http://localhost:5173/}
     depends_on:
       - db
       - redis
@@ -38,18 +37,18 @@ services:
     container_name: user-service-mysql
     environment:
       - MYSQL_DATABASE=user_service_db
-      - MYSQL_USER=user_service_user
-      - MYSQL_PASSWORD=user_service_password
-      - MYSQL_ROOT_PASSWORD=root_password
+      - MYSQL_ROOT_PASSWORD=Root123!
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./init-scripts:/docker-entrypoint-initdb.d
     networks:
       - user-service-network
     restart: unless-stopped
-    command: --default-authentication-plugin=mysql_native_password
+    # MySQL 8.0+ 기본 인증 방식 사용 (MySQL 9.x 클라이언트와 호환)
+    # 한글 지원을 위한 문자셋 설정 (필요시 주석 해제)
+    # command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 30s
@@ -98,9 +97,6 @@ services:
       retries: 3
       start_period: 30s
 
-secrets:
-  kakao_client_secret:
-    file: ./secrets/kakao_client_secret.txt
 
 volumes:
   mysql_data:
