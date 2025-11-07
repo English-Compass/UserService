@@ -11,8 +11,8 @@ import java.util.Map;
 import java.util.List;
 
 /**
- * 사용자 선호도 변경 이벤트 (카프카 메시지)
- * ProblemService에서 구독하여 사용자 정보를 비동기적으로 처리
+ * 사용자 카테고리 및 난이도 변경 이벤트 (카프카 메시지)
+ * ProblemService에서 구독하여 사용자 카테고리와 난이도 정보를 비동기적으로 처리
  */
 @Data
 @Builder

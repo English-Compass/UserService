@@ -2,6 +2,8 @@ package com.example.demo.service;
 
 import com.example.demo.dto.UserSettingsResponseDto;
 import com.example.demo.entity.User;
+import com.example.demo.entity.UserCategory;
+import com.example.demo.repository.UserCategoryRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * 사용자 관련 비즈니스 로직을 처리하는 서비스 클래스
@@ -52,11 +55,12 @@ public class UserService implements UserDetailsService {
     private final KafkaProducerService kafkaProducerService;
     
     /**
-     * 사용자 카테고리 서비스 (카테고리 정보 조회용)
-     * 생성자 주입으로 의존성 주입
+     * 사용자 카테고리 리포지토리
+     * UserService 애플리케이션 내에서 공유하는 리포지토리
+     * (UserService와 UserCategoryService는 같은 애플리케이션 내의 컴포넌트이므로 직접 조회 가능)
+     * 이벤트 발행 시 카테고리 정보를 함께 포함하기 위해 사용
      */
-    private final UserCategoryService userCategoryService;
-    
+    private final UserCategoryRepository userCategoryRepository;
     
     
     /**
@@ -186,8 +190,9 @@ public class UserService implements UserDetailsService {
         // 캐시 업데이트
         userCacheService.cacheUserDifficulty(userId, difficultyLevel);
         
-        // 카프카 이벤트 발행 (현재 카테고리 정보 포함)
-        Map<String, List<String>> currentCategories = userCategoryService.getUserCategories(userId);
+        // 카프카 이벤트 발행 (UserService 내부에서 카테고리 정보 조회하여 함께 발행)
+        // UserService와 UserCategoryService는 같은 애플리케이션 내의 컴포넌트이므로 직접 조회 가능
+        Map<String, List<String>> currentCategories = getUserCategoriesFromCacheOrRepository(userId);
         kafkaProducerService.publishDifficultyChangeEvent(userId, difficultyLevel, currentCategories);
         
         log.info("사용자 난이도 설정 완료: userId={}, level={}", userId, difficultyLevel);
@@ -247,8 +252,9 @@ public class UserService implements UserDetailsService {
         // 캐시 업데이트
         userCacheService.cacheUserDifficulty(userId, 2);
         
-        // 카프카 이벤트 발행 (현재 카테고리 정보 포함)
-        Map<String, List<String>> currentCategories = userCategoryService.getUserCategories(userId);
+        // 카프카 이벤트 발행 (UserService 내부에서 카테고리 정보 조회하여 함께 발행)
+        // UserService와 UserCategoryService는 같은 애플리케이션 내의 컴포넌트이므로 직접 조회 가능
+        Map<String, List<String>> currentCategories = getUserCategoriesFromCacheOrRepository(userId);
         kafkaProducerService.publishDifficultyChangeEvent(userId, 2, currentCategories);
         
         log.info("사용자 난이도 초기화 완료: userId={}, level=2", userId);
@@ -281,5 +287,38 @@ public class UserService implements UserDetailsService {
                 userId, user.getName(), user.getDifficultyLevel());
         
         return response;
+    }
+    
+    /**
+     * 사용자 카테고리 조회 (캐시 우선, 없으면 DB 조회)
+     * UserService 애플리케이션 내에서 공유하는 리포지토리를 사용
+     * (UserService와 UserCategoryService는 같은 애플리케이션 내의 컴포넌트이므로 직접 조회 가능)
+     * 
+     * @param userId 사용자 ID
+     * @return 대분류별로 그룹화된 카테고리 정보
+     */
+    @Transactional(readOnly = true)
+    private Map<String, List<String>> getUserCategoriesFromCacheOrRepository(Long userId) {
+        // 1. 캐시에서 먼저 조회
+        Map<String, List<String>> cachedCategories = userCacheService.getUserCategories(userId);
+        if (cachedCategories != null) {
+            log.info("✅ [CACHE] Returning categories from cache: userId={}", userId);
+            return cachedCategories;
+        }
+        
+        // 2. 캐시 미스 시 DB 조회
+        log.info("❌ [DB] Cache miss - fetching categories from database: userId={}", userId);
+        List<UserCategory> categories = userCategoryRepository.findByUser_UserId(userId);
+        
+        Map<String, List<String>> result = categories.stream()
+                .collect(Collectors.groupingBy(
+                        UserCategory::getMajorCategory,
+                        Collectors.mapping(UserCategory::getMinorCategory, Collectors.toList())
+                ));
+        
+        // 3. DB 조회 결과를 캐시에 저장
+        userCacheService.cacheUserCategories(userId, result);
+        
+        return result;
     }
 }

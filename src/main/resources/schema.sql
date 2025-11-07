@@ -5,7 +5,7 @@
 -- =============================================
 
 -- 데이터베이스 생성 (필요한 경우)
--- CREATE DATABASE IF NOT EXISTS user_service_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ㅇ-- CREATE DATABASE IF NOT EXISTS user_service_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 -- USE user_service_db;
 
 -- =============================================

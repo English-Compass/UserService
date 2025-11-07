@@ -26,7 +26,6 @@ public class UserCategoryService {
     private final UserCacheService userCacheService;
     private final EntityManager entityManager;
     private final KafkaProducerService kafkaProducerService;
-    private final UserService userService;
     
     /**
      * 사용자가 선택한 카테고리들을 저장
@@ -89,8 +88,13 @@ public class UserCategoryService {
         // 캐시 업데이트
         userCacheService.cacheUserCategories(userId, categories);
         
-        // 카프카 이벤트 발행 (현재 난이도 정보 포함)
-        Integer currentDifficulty = userService.getUserDifficultyLevel(userId);
+        // 카프카 이벤트 발행 (UserService 내부에서 난이도 정보 조회하여 함께 발행)
+        // UserService와 UserCategoryService는 같은 애플리케이션 내의 컴포넌트이므로 직접 조회 가능
+        Integer currentDifficulty = userCacheService.getUserDifficulty(userId);
+        // 캐시에 없으면 기본값 2 사용 (중급)
+        if (currentDifficulty == null) {
+            currentDifficulty = 2;
+        }
         kafkaProducerService.publishCategoryChangeEvent(userId, categories, currentDifficulty);
         
         return savedCategories;
