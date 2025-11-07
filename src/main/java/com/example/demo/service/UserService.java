@@ -12,6 +12,8 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -42,6 +44,18 @@ public class UserService implements UserDetailsService {
      * 생성자 주입으로 의존성 주입
      */
     private final UserCacheService userCacheService;
+    
+    /**
+     * 카프카 이벤트 발행을 위한 서비스
+     * 생성자 주입으로 의존성 주입
+     */
+    private final KafkaProducerService kafkaProducerService;
+    
+    /**
+     * 사용자 카테고리 서비스 (카테고리 정보 조회용)
+     * 생성자 주입으로 의존성 주입
+     */
+    private final UserCategoryService userCategoryService;
     
     
     
@@ -172,6 +186,10 @@ public class UserService implements UserDetailsService {
         // 캐시 업데이트
         userCacheService.cacheUserDifficulty(userId, difficultyLevel);
         
+        // 카프카 이벤트 발행 (현재 카테고리 정보 포함)
+        Map<String, List<String>> currentCategories = userCategoryService.getUserCategories(userId);
+        kafkaProducerService.publishDifficultyChangeEvent(userId, difficultyLevel, currentCategories);
+        
         log.info("사용자 난이도 설정 완료: userId={}, level={}", userId, difficultyLevel);
         return updatedUser;
     }
@@ -228,6 +246,10 @@ public class UserService implements UserDetailsService {
         
         // 캐시 업데이트
         userCacheService.cacheUserDifficulty(userId, 2);
+        
+        // 카프카 이벤트 발행 (현재 카테고리 정보 포함)
+        Map<String, List<String>> currentCategories = userCategoryService.getUserCategories(userId);
+        kafkaProducerService.publishDifficultyChangeEvent(userId, 2, currentCategories);
         
         log.info("사용자 난이도 초기화 완료: userId={}, level=2", userId);
         return updatedUser;

@@ -14,6 +14,8 @@ services:
       # Redis 연결 (redis 컨테이너) - 사용자 세션 및 토큰 캐싱용
       - SPRING_REDIS_HOST=redis
       - SPRING_REDIS_PORT=6379
+      # Kafka 연결 (kafka 컨테이너) - 사용자 선호도 이벤트 발행용
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
       # Kakao OAuth2 설정 (로컬 환경변수명과 동일하게 설정)
       - KAKAO_API_KEY_USER_SERVICE=${KAKAO_API_KEY_USER_SERVICE:-your-kakao-client-id}
       - KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET:-your-kakao-client-secret}
@@ -22,6 +24,7 @@ services:
     depends_on:
       - db
       - redis
+      - kafka
     networks:
       - user-service-network
     restart: unless-stopped
@@ -68,6 +71,52 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Kafka 메시지 브로커
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: user-service-kafka
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    depends_on:
+      - zookeeper
+    networks:
+      - user-service-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Zookeeper (Kafka 의존성)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: user-service-zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - user-service-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
       interval: 30s
       timeout: 10s
       retries: 3
