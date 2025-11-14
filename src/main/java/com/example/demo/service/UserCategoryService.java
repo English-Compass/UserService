@@ -35,9 +35,9 @@ public class UserCategoryService {
      * @return 저장된 카테고리 목록
      */
     @Transactional
-    public List<UserCategory> saveUserCategories(Long userId, Map<String, List<String>> categories) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userId));
+    public List<UserCategory> saveUserCategories(String userId, Map<String, List<String>> categories) {
+        User user = userRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with userId: " + userId));
         
         // 기존 카테고리 삭제 (플러시를 통해 즉시 반영)
         List<UserCategory> existingCategories = userCategoryRepository.findByUser_UserId(userId);
@@ -108,7 +108,7 @@ public class UserCategoryService {
      * @return 대분류별로 그룹화된 카테고리 정보
      */
     @Transactional(readOnly = true)
-    public Map<String, List<String>> getUserCategories(Long userId) {
+    public Map<String, List<String>> getUserCategories(String userId) {
         // 1. 캐시에서 먼저 조회
         Map<String, List<String>> cachedCategories = userCacheService.getUserCategories(userId);
         if (cachedCategories != null) {
@@ -162,7 +162,7 @@ public class UserCategoryService {
      * @return 선택했으면 true, 선택하지 않았으면 false
      */
     @Transactional(readOnly = true)
-    public boolean hasMajorCategory(Long userId, String majorCategory) {
+    public boolean hasMajorCategory(String userId, String majorCategory) {
         return userCategoryRepository.existsByUser_UserIdAndMajorCategory(userId, majorCategory);
     }
     
@@ -174,7 +174,7 @@ public class UserCategoryService {
      * @return 선택했으면 true, 선택하지 않았으면 false
      */
     @Transactional(readOnly = true)
-    public boolean hasMinorCategory(Long userId, String minorCategory) {
+    public boolean hasMinorCategory(String userId, String minorCategory) {
         return userCategoryRepository.existsByUser_UserIdAndMinorCategory(userId, minorCategory);
     }
 }

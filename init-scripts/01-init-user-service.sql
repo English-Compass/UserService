@@ -28,7 +28,8 @@ USE user_service_db;
 
 -- 1. USERS 테이블
 CREATE TABLE IF NOT EXISTS users (
-    user_id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '사용자 고유 식별자',
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '내부 ID (DB용)',
+    user_id VARCHAR(36) NOT NULL UNIQUE COMMENT '외부 노출용 사용자 UUID',
     name VARCHAR(255) NOT NULL COMMENT '사용자 이름 (닉네임)',
     profile_image VARCHAR(500) NULL COMMENT '사용자 프로필 이미지 URL',
     provider_id VARCHAR(255) NULL COMMENT '제공자에서 제공하는 사용자 ID (카카오 등)',
@@ -37,6 +38,7 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6) COMMENT '정보 마지막 수정 시간',
     
     -- 인덱스
+    INDEX idx_user_id (user_id),
     INDEX idx_provider_id (provider_id),
     INDEX idx_created_at (created_at),
     INDEX idx_difficulty_level (difficulty_level)
@@ -45,15 +47,15 @@ CREATE TABLE IF NOT EXISTS users (
 -- 2. USER_CATEGORIES 테이블
 CREATE TABLE IF NOT EXISTS user_categories (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '카테고리 고유 식별자',
-    user_id BIGINT NOT NULL COMMENT '사용자 ID (외래키)',
+    user_id BIGINT NOT NULL COMMENT '사용자 내부 ID (외래키, users.id 참조)',
     major_category VARCHAR(50) NOT NULL COMMENT '대분류 (STUDY, BUSINESS, TRAVEL, DAILY_LIFE)',
     minor_category VARCHAR(50) NOT NULL COMMENT '소분류 (CLASS_LISTENING, MEETING_CONFERENCE 등)',
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '카테고리 선택 시간',
     
-    -- 외래키 제약조건
+    -- 외래키 제약조건 (users.id 참조)
     CONSTRAINT fk_user_categories_user_id 
         FOREIGN KEY (user_id) 
-        REFERENCES users(user_id) 
+        REFERENCES users(id) 
         ON DELETE CASCADE 
         ON UPDATE CASCADE,
     
@@ -99,12 +101,15 @@ CHECK (difficulty_level IS NULL OR difficulty_level BETWEEN 1 AND 3);
 -- =============================================
 
 -- 샘플 사용자 데이터 (중복 시 무시)
-INSERT IGNORE INTO users (name, profile_image, provider_id, difficulty_level) VALUES
-('김영희', 'https://example.com/profile1.jpg', 'kakao_12345', 2),
-('박민수', 'https://example.com/profile2.jpg', 'kakao_67890', 1),
-('이지은', NULL, 'kakao_11111', 3);
+-- user_id는 UUID이므로 자동 생성되거나 명시적으로 지정 가능
+INSERT IGNORE INTO users (user_id, name, profile_image, provider_id, difficulty_level) VALUES
+('550e8400-e29b-41d4-a716-446655440000', '김영희', 'https://example.com/profile1.jpg', 'kakao_12345', 2),
+('550e8400-e29b-41d4-a716-446655440001', '박민수', 'https://example.com/profile2.jpg', 'kakao_67890', 1),
+('550e8400-e29b-41d4-a716-446655440002', '이지은', NULL, 'kakao_11111', 3);
 
 -- 샘플 사용자 카테고리 데이터 (중복 시 무시)
+-- user_id는 users 테이블의 id (내부 ID)를 참조
+-- 위에서 삽입한 사용자들의 id를 참조 (AUTO_INCREMENT로 1, 2, 3이 생성됨)
 INSERT IGNORE INTO user_categories (user_id, major_category, minor_category) VALUES
 (1, 'STUDY', 'CLASS_LISTENING'),
 (1, 'STUDY', 'DEPARTMENT_CONVERSATION'),
@@ -122,7 +127,8 @@ INSERT IGNORE INTO user_categories (user_id, major_category, minor_category) VAL
 -- 사용자별 카테고리 정보를 조인한 뷰
 CREATE OR REPLACE VIEW v_user_categories AS
 SELECT 
-    u.user_id,
+    u.id as user_internal_id,
+    u.user_id as user_uuid,
     u.name,
     u.profile_image,
     u.difficulty_level,
@@ -130,8 +136,8 @@ SELECT
     uc.minor_category,
     uc.created_at as category_selected_at
 FROM users u
-LEFT JOIN user_categories uc ON u.user_id = uc.user_id
-ORDER BY u.user_id, uc.major_category, uc.minor_category;
+LEFT JOIN user_categories uc ON u.id = uc.user_id
+ORDER BY u.id, uc.major_category, uc.minor_category;
 
 -- =============================================
 -- 초기화 완료

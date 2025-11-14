@@ -92,9 +92,20 @@ public class UserService implements UserDetailsService {
     }
     
     /**
-     * 사용자 ID로 사용자를 검색
+     * 사용자 ID로 사용자를 검색 (UUID 문자열)
      * 
-     * @param userId 사용자 ID
+     * @param userId 사용자 ID (UUID 문자열)
+     * @return 사용자 정보를 담은 Optional (사용자가 없으면 빈 Optional)
+     */
+    @Transactional(readOnly = true) // 읽기 전용 트랜잭션으로 성능 최적화
+    public Optional<User> findByUserId(String userId) {
+        return userRepository.findByUserId(userId);
+    }
+    
+    /**
+     * 사용자 ID로 사용자를 검색 (Long 타입 - 내부 ID)
+     * 
+     * @param userId 사용자 ID (Long 타입)
      * @return 사용자 정보를 담은 Optional (사용자가 없으면 빈 Optional)
      */
     @Transactional(readOnly = true) // 읽기 전용 트랜잭션으로 성능 최적화
@@ -173,7 +184,7 @@ public class UserService implements UserDetailsService {
      * @return 업데이트된 사용자 객체
      */
     @Transactional
-    public User setUserDifficultyLevel(Long userId, Integer difficultyLevel) {
+    public User setUserDifficultyLevel(String userId, Integer difficultyLevel) {
         log.info("사용자 난이도 설정: userId={}, level={}", userId, difficultyLevel);
         
         // 난이도 유효성 검사
@@ -181,8 +192,8 @@ public class UserService implements UserDetailsService {
             throw new IllegalArgumentException("Invalid difficulty level. Must be 1, 2, or 3");
         }
         
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userId));
+        User user = userRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with userId: " + userId));
         
         user.setDifficultyLevel(difficultyLevel);
         User updatedUser = userRepository.save(user);
@@ -207,7 +218,7 @@ public class UserService implements UserDetailsService {
      * @return 난이도 레벨 (1, 2, 3)
      */
     @Transactional(readOnly = true)
-    public Integer getUserDifficultyLevel(Long userId) {
+    public Integer getUserDifficultyLevel(String userId) {
         log.info("사용자 난이도 조회: userId={}", userId);
         
         // 1. 캐시에서 먼저 조회
@@ -219,8 +230,8 @@ public class UserService implements UserDetailsService {
         
         // 2. 캐시 미스 시 DB 조회
         log.info("❌ [DB] Cache miss - fetching difficulty from database: userId={}", userId);
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userId));
+        User user = userRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with userId: " + userId));
         
         Integer difficultyLevel = user.getDifficultyLevel();
         
@@ -240,11 +251,11 @@ public class UserService implements UserDetailsService {
      * @return 업데이트된 사용자 객체
      */
     @Transactional
-    public User resetUserDifficultyLevel(Long userId) {
+    public User resetUserDifficultyLevel(String userId) {
         log.info("사용자 난이도 초기화: userId={}", userId);
         
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userId));
+        User user = userRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with userId: " + userId));
         
         user.setDifficultyLevel(2); // 기본값: 중급
         User updatedUser = userRepository.save(user);
@@ -268,11 +279,11 @@ public class UserService implements UserDetailsService {
      * @return 사용자 설정 정보 응답 DTO
      */
     @Transactional(readOnly = true)
-    public UserSettingsResponseDto getUserSettings(Long userId) {
+    public UserSettingsResponseDto getUserSettings(String userId) {
         log.info("사용자 설정 정보 조회: userId={}", userId);
         
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + userId));
+        User user = userRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with userId: " + userId));
         
         UserSettingsResponseDto response = UserSettingsResponseDto.success(
                 user.getUserId(),
@@ -298,7 +309,7 @@ public class UserService implements UserDetailsService {
      * @return 대분류별로 그룹화된 카테고리 정보
      */
     @Transactional(readOnly = true)
-    private Map<String, List<String>> getUserCategoriesFromCacheOrRepository(Long userId) {
+    private Map<String, List<String>> getUserCategoriesFromCacheOrRepository(String userId) {
         // 1. 캐시에서 먼저 조회
         Map<String, List<String>> cachedCategories = userCacheService.getUserCategories(userId);
         if (cachedCategories != null) {

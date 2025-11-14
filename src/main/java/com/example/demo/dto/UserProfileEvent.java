@@ -18,11 +18,11 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserPreferenceEvent {
+public class UserProfileEvent {
     /**
-     * 사용자 ID
+     * 사용자 UUID (외부 노출용)
      */
-    private Long userId;
+    private String userId;
     
     /**
      * 사용자 선택 카테고리 (대분류: [소분류들] 형태)

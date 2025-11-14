@@ -1,9 +1,9 @@
 services:
-  app:
+  user-service-app:  # 서비스 이름을 명시적으로 설정
     build: .
     container_name: user-service-app
     ports:
-      - "8080:8080"
+      - "8081:8081"
     environment:
       # Spring Profile 설정: docker 프로파일 활성화 → application-docker.properties 파일 사용
       - SPRING_PROFILES_ACTIVE=docker
@@ -19,17 +19,22 @@ services:
       # Kakao OAuth2 설정 (로컬 환경변수명과 동일하게 설정)
       - KAKAO_API_KEY_USER_SERVICE=${KAKAO_API_KEY_USER_SERVICE:-your-kakao-client-id}
       - KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET:-your-kakao-client-secret}
+      # OAuth2 Redirect URI 설정 (API Gateway를 통한 경로)
+      - OAUTH2_REDIRECT_URI=${OAUTH2_REDIRECT_URI:-http://localhost:8080/api/auth/oauth2/callback/kakao}
       # 프론트엔드 URL 설정 (Docker 환경에서는 Nginx를 통해 접근)
       - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-http://localhost:5173/}
+      # JWT 시크릿 키 (API Gateway와 동일한 값 사용 필수!)
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-this-in-production-minimum-256-bits}
     depends_on:
       - db
       - redis
       - kafka
     networks:
-      - user-service-network
+      - user-service-network  # db, redis, kafka와 통신용
+      - english-compass-network  # API Gateway와 통신용
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -41,6 +46,8 @@ services:
     environment:
       - MYSQL_DATABASE=user_service_db
       - MYSQL_ROOT_PASSWORD=Root123!
+      - MYSQL_USER=user_service_user          # 추가
+      - MYSQL_PASSWORD=user_service_password   # 추가
     ports:
       - "3307:3306"
     volumes:
@@ -81,12 +88,17 @@ services:
     image: confluentinc/cp-kafka:7.5.0
     container_name: user-service-kafka
     ports:
-      - "9094:9092"  # 외부 포트 9094, 내부 포트 9092 (컨테이너 간 통신용)
+      - "9094:9092"  # 외부 포트 9094, 내부 포트 9092 (PLAINTEXT 리스너)
+      - "9095:9093"  # 외부 포트 9095, 내부 포트 9093 (PLAINTEXT_EXTERNAL 리스너)
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      # 공유 네트워크를 사용하는 경우:
+      # - PLAINTEXT://kafka:9092: 같은 docker-compose 내의 컨테이너 간 통신
+      # - PLAINTEXT_EXTERNAL://user-service-kafka:9093: 공유 네트워크를 통한 다른 docker-compose의 컨테이너에서 접근
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_EXTERNAL://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_EXTERNAL://user-service-kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_EXTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
@@ -94,6 +106,7 @@ services:
       - zookeeper
     networks:
       - user-service-network
+      - english-compass-network  # ProblemService와 통신을 위한 공유 네트워크
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
@@ -113,6 +126,7 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     networks:
       - user-service-network
+      - english-compass-network  # ProblemService와 통신을 위한 공유 네트워크
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "nc", "-z", "localhost", "2181"]
@@ -121,31 +135,6 @@ services:
       retries: 3
       start_period: 30s
 
-  # Nginx 웹 서버 및 로드 밸런서
-  nginx:
-    image: nginx:alpine
-    container_name: user-service-nginx
-    ports:
-      - "80:80"      # HTTP
-      - "443:443"    # HTTPS (선택사항)
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/html:/usr/share/nginx/html:ro
-      - ./nginx/logs:/var/log/nginx
-    depends_on:
-      - app
-    networks:
-      - user-service-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
-
 volumes:
   mysql_data:
   redis_data:
@@ -153,3 +142,9 @@ volumes:
 networks:
   user-service-network:
     driver: bridge
+  # 공유 네트워크: ProblemService와 통신을 위한 외부 네트워크
+  # 사용 전에 먼저 생성 필요: docker network create --attachable english-compass-network
+  # 기존 네트워크가 attachable이 아니면 재생성 필요 (다른 컨테이너 영향 고려)
+  english-compass-network:
+    external: true
+    name: english-compass-network

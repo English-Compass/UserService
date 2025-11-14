@@ -34,9 +34,9 @@ public class UserSettingsResponseDto {
     private String message;
     
     /**
-     * 사용자 ID
+     * 사용자 UUID (외부 노출용)
      */
-    private Long userId;
+    private String userId;
     
     /**
      * 사용자 이름 (닉네임)
@@ -79,7 +79,7 @@ public class UserSettingsResponseDto {
      * @param updatedAt 수정 시간
      * @return 성공 응답 DTO
      */
-    public static UserSettingsResponseDto success(Long userId, String name, String profileImage, 
+    public static UserSettingsResponseDto success(String userId, String name, String profileImage, 
                                                  Integer difficultyLevel, LocalDateTime createdAt, LocalDateTime updatedAt) {
         return UserSettingsResponseDto.builder()
                 .success(true)
@@ -105,7 +105,7 @@ public class UserSettingsResponseDto {
      * @param updatedAt 수정 시간
      * @return 설정 수정 성공 응답 DTO
      */
-    public static UserSettingsResponseDto updateSuccess(Long userId, String name, String profileImage, 
+    public static UserSettingsResponseDto updateSuccess(String userId, String name, String profileImage, 
                                                        Integer difficultyLevel, LocalDateTime createdAt, LocalDateTime updatedAt) {
         return UserSettingsResponseDto.builder()
                 .success(true)

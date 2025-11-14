@@ -29,8 +29,8 @@ public class UserCacheService {
     // ObjectMapper는 Spring Boot가 자동으로 빈으로 제공하므로 주입받음
     private final ObjectMapper objectMapper;
     
-    private static final String USER_DIFFICULTY_KEY = "user:difficulty:%d";
-    private static final String USER_CATEGORIES_KEY = "user:categories:%d";
+    private static final String USER_DIFFICULTY_KEY = "user:difficulty:%s";
+    private static final String USER_CATEGORIES_KEY = "user:categories:%s";
     private static final long CACHE_TTL_HOURS = 24; // 24시간 캐시 유지
     
     /**
@@ -39,7 +39,7 @@ public class UserCacheService {
      * @param userId 사용자 ID
      * @param difficultyLevel 난이도 레벨
      */
-    public void cacheUserDifficulty(Long userId, Integer difficultyLevel) {
+    public void cacheUserDifficulty(String userId, Integer difficultyLevel) {
         try {
             String key = String.format(USER_DIFFICULTY_KEY, userId);
             redisTemplate.opsForValue().set(key, difficultyLevel, CACHE_TTL_HOURS, TimeUnit.HOURS);
@@ -55,7 +55,7 @@ public class UserCacheService {
      * @param userId 사용자 ID
      * @return 캐시된 난이도 레벨 (없으면 null)
      */
-    public Integer getUserDifficulty(Long userId) {
+    public Integer getUserDifficulty(String userId) {
         try {
             String key = String.format(USER_DIFFICULTY_KEY, userId);
             Object value = redisTemplate.opsForValue().get(key);
@@ -81,7 +81,7 @@ public class UserCacheService {
      * @param userId 사용자 ID
      * @param categories 카테고리 정보
      */
-    public void cacheUserCategories(Long userId, Map<String, List<String>> categories) {
+    public void cacheUserCategories(String userId, Map<String, List<String>> categories) {
         try {
             String key = String.format(USER_CATEGORIES_KEY, userId);
             redisTemplate.opsForValue().set(key, categories, CACHE_TTL_HOURS, TimeUnit.HOURS);
@@ -99,7 +99,7 @@ public class UserCacheService {
      * @return 캐시된 카테고리 정보 (없으면 null)
      */
     @SuppressWarnings("unchecked")
-    public Map<String, List<String>> getUserCategories(Long userId) {
+    public Map<String, List<String>> getUserCategories(String userId) {
         try {
             String key = String.format(USER_CATEGORIES_KEY, userId);
             Object value = redisTemplate.opsForValue().get(key);
@@ -124,7 +124,7 @@ public class UserCacheService {
      * 
      * @param userId 사용자 ID
      */
-    public void invalidateUserCache(Long userId) {
+    public void invalidateUserCache(String userId) {
         try {
             String difficultyKey = String.format(USER_DIFFICULTY_KEY, userId);
             String categoriesKey = String.format(USER_CATEGORIES_KEY, userId);
@@ -143,7 +143,7 @@ public class UserCacheService {
      * @param difficultyLevel 난이도 레벨
      * @param categories 카테고리 정보
      */
-    public void cacheUserInfo(Long userId, Integer difficultyLevel, Map<String, List<String>> categories) {
+    public void cacheUserInfo(String userId, Integer difficultyLevel, Map<String, List<String>> categories) {
         cacheUserDifficulty(userId, difficultyLevel);
         cacheUserCategories(userId, categories);
     }

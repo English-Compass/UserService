@@ -5,13 +5,9 @@ import com.example.demo.dto.UserSettingsResponseDto;
 import com.example.demo.service.UserService;
 import com.example.demo.service.UserCategoryService;
 import com.example.demo.service.UserCacheService;
-import com.example.demo.security.CustomUserDetails;
-import com.example.demo.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -47,12 +43,6 @@ public class UserController {
     private final UserCategoryService userCategoryService;
     
     /**
-     * JWT 토큰 생성을 위한 유틸리티
-     * 생성자 주입으로 의존성 주입
-     */
-    private final JwtUtil jwtUtil;
-    
-    /**
      * 사용자 정보 캐싱을 위한 서비스
      * 생성자 주입으로 의존성 주입
      */
@@ -61,24 +51,18 @@ public class UserController {
     /**
      * 현재 로그인한 사용자의 프로필 정보를 조회
      * 
-     * @param userDetails Spring Security에서 제공하는 인증된 사용자 정보
+     * @param userId API Gateway에서 헤더로 전달하는 사용자 ID
      * @return 사용자 프로필 정보 (JSON 형태)
-     *         - 인증되지 않은 경우: 401 Unauthorized
-     *         - 사용자를 찾을 수 없는 경우: 500 Internal Server Error
+     *         - 사용자를 찾을 수 없는 경우: 404 Not Found
      *         - 성공 시: 200 OK와 함께 사용자 정보
      */
     @GetMapping("/profile")
-    public ResponseEntity<Map<String, Object>> getUserProfile(@AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<Map<String, Object>> getUserProfile(
+            @RequestHeader("X-User-Id") String userId) {
         try {
-            // 인증된 사용자가 없는 경우 처리
-            if (userDetails == null) {
-                log.warn("Unauthenticated user tried to access profile"); // 로그 기록
-                return ResponseEntity.status(401).body(Map.of("error", "User not authenticated"));
-            }
-            
             // 사용자 정보를 데이터베이스에서 조회
-            User user = userService.findByProviderId(userDetails.getUsername())
-                    .orElseThrow(() -> new RuntimeException("User not found"));
+            User user = userService.findByUserId(userId)
+                    .orElseThrow(() -> new RuntimeException("User not found with userId: " + userId));
             
             // 응답 데이터 구성
             Map<String, Object> response = new HashMap<>();
@@ -88,73 +72,81 @@ public class UserController {
             response.put("difficultyLevel", user.getDifficultyLevel());
             response.put("createdAt", user.getCreatedAt());
             
-            log.info("User profile retrieved successfully: {}", user.getName()); // 로그 기록
+            log.info("User profile retrieved successfully: userId={}, name={}", userId, user.getName());
             return ResponseEntity.ok(response);
             
+        } catch (RuntimeException e) {
+            log.error("User not found: userId={}", userId);
+            return ResponseEntity.status(404).body(Map.of("error", "User not found"));
         } catch (Exception e) {
-            log.error("Error getting user profile", e); // 에러 로그 기록
+            log.error("Error getting user profile: userId={}", userId, e);
+            return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
+        }
+    }
+    
+    /**
+     * 사용자 프로필 편집
+     * 
+     * @param userId API Gateway에서 헤더로 전달하는 사용자 ID
+     * @param request 프로필 수정 요청 (name, profileImage)
+     * @return 수정된 사용자 프로필 정보
+     */
+    @PutMapping("/profile")
+    public ResponseEntity<Map<String, Object>> updateUserProfile(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestBody Map<String, Object> request) {
+        try {
+            // 사용자 정보를 데이터베이스에서 조회
+            User user = userService.findByUserId(userId)
+                    .orElseThrow(() -> new RuntimeException("User not found with userId: " + userId));
+            
+            // 요청에서 수정할 정보 추출
+            String name = (String) request.get("name");
+            String profileImage = (String) request.get("profileImage");
+            
+            // 이름 업데이트
+            if (name != null && !name.trim().isEmpty()) {
+                user.setName(name);
+            }
+            
+            // 프로필 이미지 업데이트
+            if (profileImage != null) {
+                user.setProfileImage(profileImage);
+            }
+            
+            // 사용자 정보 저장
+            User updatedUser = userService.saveUser(user);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("userId", updatedUser.getUserId());
+            response.put("name", updatedUser.getName());
+            response.put("profileImage", updatedUser.getProfileImage());
+            response.put("message", "프로필이 성공적으로 수정되었습니다");
+            
+            log.info("User profile updated: userId={}, name={}", userId, updatedUser.getName());
+            return ResponseEntity.ok(response);
+            
+        } catch (RuntimeException e) {
+            log.error("User not found: userId={}", userId);
+            return ResponseEntity.status(404).body(Map.of("error", "User not found"));
+        } catch (Exception e) {
+            log.error("Error updating user profile: userId={}", userId, e);
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
         }
     }
     
     
     /**
-     * 현재 사용자의 인증 상태를 확인
-     * 
-     * @param userDetails Spring Security에서 제공하는 인증된 사용자 정보
-     * @return 인증 상태 정보 (JSON 형태)
-     *         - 인증된 경우: authenticated=true와 함께 사용자 정보
-     *         - 인증되지 않은 경우: authenticated=false
-     */
-    @GetMapping("/check-auth")
-    public ResponseEntity<Map<String, Object>> checkAuthentication(@AuthenticationPrincipal UserDetails userDetails) {
-        Map<String, Object> response = new HashMap<>();
-        
-        if (userDetails != null) {
-            // 인증된 사용자인 경우
-            response.put("authenticated", true);
-            response.put("email", userDetails.getUsername());
-            response.put("authorities", userDetails.getAuthorities());
-            log.debug("Authentication check: user {} is authenticated", userDetails.getUsername()); // 디버그 로그
-        } else {
-            // 인증되지 않은 사용자인 경우
-            response.put("authenticated", false);
-            log.debug("Authentication check: user is not authenticated"); // 디버그 로그
-        }
-        
-        return ResponseEntity.ok(response);
-    }
-    
-    
-    
-    /**
      * 사용자 카테고리 조회
      * 
-     * @param userDetails Spring Security에서 제공하는 인증된 사용자 정보
+     * @param userId API Gateway에서 헤더로 전달하는 사용자 ID
      * @return 사용자 카테고리 정보
      */
     @GetMapping("/categories")
-    public ResponseEntity<Map<String, Object>> getUserCategories(@AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<Map<String, Object>> getUserCategories(
+            @RequestHeader("X-User-Id") String userId) {
         try {
-            if (userDetails == null) {
-                return ResponseEntity.status(401).body(Map.of("error", "User not authenticated"));
-            }
-            
-            // JWT 인증된 사용자의 경우 CustomUserDetails에서 직접 userId 가져오기
-            Long userId;
-            User user;
-            
-            if (userDetails instanceof CustomUserDetails) {
-                CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
-                userId = customUserDetails.getUserId();
-                user = customUserDetails.getUser();
-            } else {
-                // OAuth2 인증된 사용자의 경우 providerId로 조회
-                user = userService.findByProviderId(userDetails.getUsername())
-                        .orElseThrow(() -> new RuntimeException("User not found"));
-                userId = user.getUserId();
-            }
-            
             // userId를 통해 카테고리 정보 조회
             Map<String, java.util.List<String>> categories = userCategoryService.getUserCategories(userId);
             
@@ -166,7 +158,7 @@ public class UserController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            log.error("Error getting user categories", e);
+            log.error("Error getting user categories: userId={}", userId, e);
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
         }
     }
@@ -174,31 +166,13 @@ public class UserController {
     /**
      * 사용자 설정 정보 조회
      * 
-     * @param userDetails Spring Security에서 제공하는 인증된 사용자 정보
+     * @param userId API Gateway에서 헤더로 전달하는 사용자 ID
      * @return 사용자 설정 정보 (프로필, 난이도, 카테고리)
      */
     @GetMapping("/settings")
-    public ResponseEntity<Map<String, Object>> getUserSettings(@AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<Map<String, Object>> getUserSettings(
+            @RequestHeader("X-User-Id") String userId) {
         try {
-            if (userDetails == null) {
-                return ResponseEntity.status(401).body(Map.of("error", "User not authenticated"));
-            }
-            
-            // JWT 인증된 사용자의 경우 CustomUserDetails에서 직접 userId 가져오기
-            Long userId;
-            User user;
-            
-            if (userDetails instanceof CustomUserDetails) {
-                CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
-                userId = customUserDetails.getUserId();
-                user = customUserDetails.getUser();
-            } else {
-                // OAuth2 인증된 사용자의 경우 providerId로 조회
-                user = userService.findByProviderId(userDetails.getUsername())
-                        .orElseThrow(() -> new RuntimeException("User not found"));
-                userId = user.getUserId();
-            }
-            
             // userId를 통해 사용자 설정 정보 조회
             UserSettingsResponseDto settingsResponse = userService.getUserSettings(userId);
             
@@ -206,13 +180,12 @@ public class UserController {
             Map<String, java.util.List<String>> categories = userCategoryService.getUserCategories(userId);
             settingsResponse.addData("categories", categories);
             
-            log.info("User settings retrieved: userId={}, name={}, difficultyLevel={}", 
-                    userId, user.getName(), user.getDifficultyLevel());
+            log.info("User settings retrieved: userId={}", userId);
             
             return ResponseEntity.ok(settingsResponse.toMap());
             
         } catch (Exception e) {
-            log.error("Error getting user settings", e);
+            log.error("Error getting user settings: userId={}", userId, e);
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
         }
     }
@@ -220,37 +193,48 @@ public class UserController {
     /**
      * 사용자 난이도 설정 (별도 엔드포인트)
      * 
-     * @param userDetails Spring Security에서 제공하는 인증된 사용자 정보
+     * @param userId API Gateway에서 헤더로 전달하는 사용자 ID
      * @param request 난이도 레벨
      * @return 설정 결과
      */
     @PostMapping("/settings/difficulty")
     public ResponseEntity<Map<String, Object>> setUserDifficulty(
-            @AuthenticationPrincipal UserDetails userDetails,
-            @RequestBody Map<String, Integer> request) {
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestBody Map<String, Object> request) {
+        
+        log.info("=== POST /user/settings/difficulty 요청 수신 ===");
+        log.info("X-User-Id header: {}", userId);
+        log.info("Request body: {}", request);
+        log.info("Request method: POST");
         
         try {
-            if (userDetails == null) {
-                return ResponseEntity.status(401).body(Map.of("error", "User not authenticated"));
+            // X-User-Id 헤더 검증
+            if (userId == null || userId.trim().isEmpty()) {
+                log.error("X-User-Id header is missing or empty");
+                return ResponseEntity.status(401).body(Map.of("error", "X-User-Id header is required"));
             }
             
-            // JWT 인증된 사용자의 경우 CustomUserDetails에서 직접 userId 가져오기
-            Long userId;
-            User user;
+            log.info("Received difficulty request: userId={}, request={}", userId, request);
             
-            if (userDetails instanceof CustomUserDetails) {
-                CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
-                userId = customUserDetails.getUserId();
-                user = customUserDetails.getUser();
-            } else {
-                // OAuth2 인증된 사용자의 경우 providerId로 조회
-                user = userService.findByProviderId(userDetails.getUsername())
-                        .orElseThrow(() -> new RuntimeException("User not found"));
-                userId = user.getUserId();
+            // difficultyLevel 추출 (Integer 또는 String으로 올 수 있음)
+            Object difficultyLevelObj = request.get("difficultyLevel");
+            Integer difficultyLevel = null;
+            
+            if (difficultyLevelObj instanceof Integer) {
+                difficultyLevel = (Integer) difficultyLevelObj;
+            } else if (difficultyLevelObj instanceof String) {
+                try {
+                    difficultyLevel = Integer.parseInt((String) difficultyLevelObj);
+                } catch (NumberFormatException e) {
+                    log.error("Invalid difficulty level format: {}", difficultyLevelObj);
+                    return ResponseEntity.badRequest().body(Map.of("error", "Invalid difficulty level format"));
+                }
+            } else if (difficultyLevelObj instanceof Number) {
+                difficultyLevel = ((Number) difficultyLevelObj).intValue();
             }
             
-            Integer difficultyLevel = request.get("difficultyLevel");
             if (difficultyLevel == null || difficultyLevel < 1 || difficultyLevel > 3) {
+                log.error("Invalid difficulty level: userId={}, level={}", userId, difficultyLevel);
                 return ResponseEntity.badRequest().body(Map.of("error", "Invalid difficulty level. Must be 1, 2, or 3"));
             }
             
@@ -263,47 +247,31 @@ public class UserController {
             response.put("userId", userId);
             response.put("difficultyLevel", updatedUser.getDifficultyLevel());
             
-            log.info("User difficulty set: userId={}, level={}", userId, updatedUser.getDifficultyLevel());
+            log.info("User difficulty set successfully: userId={}, level={}", userId, updatedUser.getDifficultyLevel());
             return ResponseEntity.ok(response);
             
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid request: userId={}, error={}", userId, e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
-            log.error("Error setting user difficulty", e);
-            return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
+            log.error("Error setting user difficulty: userId={}, error={}", userId, e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", "Internal server error: " + e.getMessage()));
         }
     }
     
     /**
      * 사용자 카테고리 설정 (전체 교체 - PUT 사용)
      * 
-     * @param userDetails Spring Security에서 제공하는 인증된 사용자 정보
+     * @param userId API Gateway에서 헤더로 전달하는 사용자 ID
      * @param request 카테고리 정보
      * @return 설정 결과
      */
     @PutMapping("/settings/categories")
     public ResponseEntity<Map<String, Object>> setUserCategories(
-            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestHeader("X-User-Id") String userId,
             @RequestBody Map<String, Object> request) {
         
-        Long userId = null;
         try {
-            if (userDetails == null) {
-                return ResponseEntity.status(401).body(Map.of("error", "User not authenticated"));
-            }
-            
-            // JWT 인증된 사용자의 경우 CustomUserDetails에서 직접 userId 가져오기
-            User user;
-            
-            if (userDetails instanceof CustomUserDetails) {
-                CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
-                userId = customUserDetails.getUserId();
-                user = customUserDetails.getUser();
-            } else {
-                // OAuth2 인증된 사용자의 경우 providerId로 조회
-                user = userService.findByProviderId(userDetails.getUsername())
-                        .orElseThrow(() -> new RuntimeException("User not found"));
-                userId = user.getUserId();
-            }
-            
             log.info("Received category request: userId={}, request={}", userId, request);
             
             @SuppressWarnings("unchecked")
@@ -329,10 +297,10 @@ public class UserController {
             return ResponseEntity.ok(response);
             
         } catch (IllegalArgumentException e) {
-            log.error("Invalid category data: userId={}, error={}", userId != null ? userId : "unknown", e.getMessage(), e);
+            log.error("Invalid category data: userId={}, error={}", userId, e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
-            log.error("Error setting user categories: userId={}, error={}", userId != null ? userId : "unknown", e.getMessage(), e);
+            log.error("Error setting user categories: userId={}, error={}", userId, e.getMessage(), e);
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error: " + e.getMessage()));
         }
     }
@@ -340,34 +308,17 @@ public class UserController {
     /**
      * 사용자 초기 설정 완료 여부 조회
      * 
-     * @param token JWT 토큰
+     * @param userId API Gateway에서 헤더로 전달하는 사용자 ID
      * @return 사용자 설정 완료 여부
      */
     @GetMapping("/settings/status")
     public ResponseEntity<?> getUserSetupStatus(
-            @RequestHeader("Authorization") String token) {
+            @RequestHeader("X-User-Id") String userId) {
         
         try {
-            // JWT 토큰 검증
-            if (token == null || !token.startsWith("Bearer ")) {
-                return ResponseEntity.status(401).body(Map.of("error", "Invalid token format"));
-            }
-            
-            String jwt = token.substring(7);
-            
-            // JWT 토큰에서 사용자 정보 추출
-            String providerId = jwtUtil.extractProviderId(jwt);
-            String name = jwtUtil.extractName(jwt);
-            String profileImage = jwtUtil.extractProfileImage(jwt);
-            Long userId = jwtUtil.extractUserId(jwt);
-            
-            if (providerId == null || userId == null) {
-                return ResponseEntity.status(401).body(Map.of("error", "Invalid token"));
-            }
-            
-            // providerId로 사용자 조회 (검증용)
-            User user = userService.findByProviderId(providerId)
-                    .orElseThrow(() -> new RuntimeException("User not found"));
+            // 사용자 정보 조회
+            User user = userService.findByUserId(userId)
+                    .orElseThrow(() -> new RuntimeException("User not found with userId: " + userId));
             
             // 사용자 초기 설정 완료 여부 확인
             boolean hasCompletedSetup = false;
@@ -384,60 +335,52 @@ public class UserController {
             Map<String, Object> response = new HashMap<>();
             response.put("hasCompletedSetup", hasCompletedSetup);
             response.put("userId", userId);
-            response.put("name", name != null ? name : user.getName());
-            response.put("profileImage", profileImage != null ? profileImage : user.getProfileImage());
+            response.put("name", user.getName());
+            response.put("profileImage", user.getProfileImage());
             
             log.info("User setup status checked: userId={}, hasCompletedSetup={}", userId, hasCompletedSetup);
             
             return ResponseEntity.ok(response);
             
+        } catch (RuntimeException e) {
+            log.error("User not found: userId={}", userId);
+            return ResponseEntity.status(404).body(Map.of("error", "User not found"));
         } catch (Exception e) {
-            log.error("Error checking user setup status", e);
+            log.error("Error checking user setup status: userId={}", userId, e);
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
         }
     }
     
     /**
-     * JWT 토큰에서 사용자 정보 추출 (프론트엔드용)
+     * 현재 인증된 사용자 정보 조회 (프론트엔드용)
      * 
-     * @param token JWT 토큰
-     * @return JWT 토큰에 포함된 사용자 정보
+     * @param userId API Gateway에서 헤더로 전달하는 사용자 ID
+     * @return 사용자 정보
      */
     @GetMapping("/token/info")
     public ResponseEntity<?> getTokenInfo(
-            @RequestHeader("Authorization") String token) {
+            @RequestHeader("X-User-Id") String userId) {
         
         try {
-            // JWT 토큰 검증
-            if (token == null || !token.startsWith("Bearer ")) {
-                return ResponseEntity.status(401).body(Map.of("error", "Invalid token format"));
-            }
-            
-            String jwt = token.substring(7);
-            
-            // JWT 토큰 유효성 검증
-            if (!jwtUtil.validateToken(jwt)) {
-                return ResponseEntity.status(401).body(Map.of("error", "Invalid or expired token"));
-            }
-            
-            // JWT 토큰에서 사용자 정보 추출
-            String providerId = jwtUtil.extractProviderId(jwt);
-            String name = jwtUtil.extractName(jwt);
-            String profileImage = jwtUtil.extractProfileImage(jwt);
-            Long userId = jwtUtil.extractUserId(jwt);
+            // 사용자 정보 조회
+            User user = userService.findByUserId(userId)
+                    .orElseThrow(() -> new RuntimeException("User not found with userId: " + userId));
             
             Map<String, Object> response = new HashMap<>();
             response.put("userId", userId);
-            response.put("name", name);
-            response.put("profileImage", profileImage);
-            response.put("providerId", providerId);
+            response.put("name", user.getName());
+            response.put("profileImage", user.getProfileImage());
+            response.put("providerId", user.getProviderId());
             
-            log.info("Token info extracted: userId={}, name={}", userId, name);
+            log.info("User info retrieved: userId={}, name={}", userId, user.getName());
             
             return ResponseEntity.ok(response);
             
+        } catch (RuntimeException e) {
+            log.error("User not found: userId={}", userId);
+            return ResponseEntity.status(404).body(Map.of("error", "User not found"));
         } catch (Exception e) {
-            log.error("Error extracting token info", e);
+            log.error("Error getting user info: userId={}", userId, e);
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
         }
     }
@@ -445,26 +388,13 @@ public class UserController {
     /**
      * 사용자 캐시 상태 확인 (디버깅용)
      * 
-     * @param userDetails Spring Security에서 제공하는 인증된 사용자 정보
+     * @param userId API Gateway에서 헤더로 전달하는 사용자 ID
      * @return 캐시 상태 정보
      */
     @GetMapping("/cache/status")
-    public ResponseEntity<Map<String, Object>> getCacheStatus(@AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<Map<String, Object>> getCacheStatus(
+            @RequestHeader("X-User-Id") String userId) {
         try {
-            if (userDetails == null) {
-                return ResponseEntity.status(401).body(Map.of("error", "User not authenticated"));
-            }
-            
-            Long userId;
-            if (userDetails instanceof CustomUserDetails) {
-                CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
-                userId = customUserDetails.getUserId();
-            } else {
-                User user = userService.findByProviderId(userDetails.getUsername())
-                        .orElseThrow(() -> new RuntimeException("User not found"));
-                userId = user.getUserId();
-            }
-            
             // 캐시에서 직접 조회
             Integer cachedDifficulty = userCacheService.getUserDifficulty(userId);
             Map<String, List<String>> cachedCategories = userCacheService.getUserCategories(userId);
@@ -488,7 +418,7 @@ public class UserController {
             return ResponseEntity.ok(response);
             
         } catch (Exception e) {
-            log.error("Error checking cache status", e);
+            log.error("Error checking cache status: userId={}", userId, e);
             return ResponseEntity.status(500).body(Map.of("error", "Internal server error"));
         }
     }

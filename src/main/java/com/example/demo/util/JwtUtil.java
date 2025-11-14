@@ -70,11 +70,11 @@ public class JwtUtil {
     }
 
     /**
-     * JWT 토큰에서 사용자 ID 추출
+     * JWT 토큰에서 사용자 UUID 추출 (외부 노출용)
      */
-    public Long extractUserId(String token) {
+    public String extractUserId(String token) {
         Claims claims = extractAllClaims(token);
-        return claims.get("userId", Long.class);
+        return claims.get("userId", String.class);
     }
 
     /**
@@ -142,19 +142,20 @@ public class JwtUtil {
      * 
      * @param providerId 카카오에서 제공하는 고유 ID
      * @param name 사용자 닉네임
-     * @param userId 데이터베이스 사용자 ID
+     * @param userId 사용자 UUID (외부 노출용)
      * @param profileImage 프로필 이미지 URL
      * @return JWT 토큰
      */
-    public String generateTokenWithUserInfo(String providerId, String name, Long userId, String profileImage) {
+    public String generateTokenWithUserInfo(String providerId, String name, String userId, String profileImage) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("providerId", providerId);
         claims.put("name", name);
-        claims.put("userId", userId);
+        claims.put("userId", userId);  // UUID 사용
         claims.put("profileImage", profileImage);
         claims.put("provider", "kakao");
         
-        return createToken(claims, providerId);
+        // JWT subject는 userId (UUID) 사용
+        return createToken(claims, userId);
     }
 
     /**

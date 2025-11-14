@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 사용자 정보를 저장하는 JPA 엔티티
@@ -22,12 +23,20 @@ import java.util.List;
 public class User {
     
     /**
-     * 사용자 고유 식별자 (Primary Key)
+     * 내부 ID (Primary Key, DB용)
      * 자동 증가하는 값
      */
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long userId;
+    @Column(name = "id")
+    private Long id;
+    
+    /**
+     * 외부 노출용 사용자 ID (UUID)
+     * API Gateway와 다른 서비스에서 사용
+     */
+    @Column(name = "user_id", unique = true, nullable = false, length = 36)
+    private String userId;
     
     /**
      * 사용자 이름 (닉네임)
@@ -79,9 +88,13 @@ public class User {
     /**
      * 엔티티가 데이터베이스에 저장되기 전에 실행되는 메서드
      * 생성 시간과 수정 시간을 현재 시간으로 설정
+     * UUID 자동 생성
      */
     @PrePersist // 데이터베이스에 저장하기 전에 실행
     protected void onCreate() {
+        if (userId == null) {
+            userId = UUID.randomUUID().toString();
+        }
         createdAt = LocalDateTime.now(); // 현재 시간으로 설정
     }
     

@@ -118,42 +118,15 @@
             <h3>📋 사용 가능한 API 엔드포인트</h3>
             <ul class="endpoint-list">
                 <li><strong>카카오 로그인:</strong> /oauth2/authorization/kakao</li>
-                <li><strong>로그인 성공:</strong> /auth/login/success</li>
-                <li><strong>로그인 실패:</strong> /auth/login/failure</li>
-                <li><strong>인증 상태:</strong> /auth/status</li>
             </ul>
         </div>
     </div>
 
     <script>
-        // 페이지 로드 시 초기화
-        document.addEventListener('DOMContentLoaded', function() {
-            checkAuthStatus();
-        });
-
         // 카카오 로그인 - 올바른 엔드포인트 사용
         function kakaoLogin() {
             console.log('카카오 로그인 시작...');
             window.location.href = '/oauth2/authorization/kakao';
-        }
-
-        // 인증 상태 확인 - 실제 구현된 엔드포인트 사용
-        async function checkAuthStatus() {
-            try {
-                const response = await fetch('/auth/status');
-                if (response.ok) {
-                    const data = await response.json();
-                    console.log('인증 상태:', data);
-                    
-                    // JWT 토큰이 있으면 프로필 표시
-                    const token = localStorage.getItem('jwt_token');
-                    if (token) {
-                        showProfile(token);
-                    }
-                }
-            } catch (error) {
-                console.log('인증되지 않은 상태');
-            }
         }
 
         // 프로필 표시 - JWT 토큰 사용

@@ -33,4 +33,20 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * @return 사용자가 존재하면 true, 존재하지 않으면 false
      */
     boolean existsByProviderId(String providerId);
+    
+    /**
+     * UUID로 사용자를 검색 (외부 노출용)
+     * 
+     * @param userId 사용자 UUID
+     * @return 사용자 정보를 담은 Optional (사용자가 없으면 빈 Optional)
+     */
+    Optional<User> findByUserId(String userId);
+    
+    /**
+     * 특정 UUID를 가진 사용자가 존재하는지 확인
+     * 
+     * @param userId 사용자 UUID
+     * @return 사용자가 존재하면 true, 존재하지 않으면 false
+     */
+    boolean existsByUserId(String userId);
 }

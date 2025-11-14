@@ -43,11 +43,11 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # 포트 노출
-EXPOSE 8080
+EXPOSE 8081
 
 # 헬스 체크 설정
 HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8080/actuator/health || exit 1
+    CMD curl -f http://localhost:8081/actuator/health || exit 1
 
 # 컨테이너 환경을 위한 JVM 옵션 설정 (Java 17 호환)
 ENV JAVA_OPTS="-XX:+UseG1GC -XX:MaxRAMPercentage=75 -Xlog:gc*:stdout:time -Dspring.profiles.active=docker"

@@ -86,10 +86,17 @@ public class CustomUserDetails implements UserDetails {
     }
     
     /**
-     * User 엔티티의 ID를 반환
+     * User 엔티티의 UUID를 반환 (외부 노출용)
      */
-    public Long getUserId() {
+    public String getUserId() {
         return user.getUserId();
+    }
+    
+    /**
+     * User 엔티티의 내부 ID를 반환 (DB용)
+     */
+    public Long getId() {
+        return user.getId();
     }
     
     /**

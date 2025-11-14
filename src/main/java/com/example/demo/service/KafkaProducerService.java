@@ -1,6 +1,6 @@
 package com.example.demo.service;
 
-import com.example.demo.dto.UserPreferenceEvent;
+import com.example.demo.dto.UserProfileEvent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -38,12 +38,12 @@ public class KafkaProducerService {
      * @param difficulty 난이도 정보 (null 가능)
      * @param eventType 이벤트 타입 (DIFFICULTY, CATEGORIES, BOTH)
      */
-    public void publishUserPreferenceEvent(Long userId, 
+    public void publishUserPreferenceEvent(String userId, 
                                           Map<String, List<String>> categories, 
                                           Integer difficulty, 
                                           String eventType) {
         try {
-            UserPreferenceEvent event = UserPreferenceEvent.builder()
+            UserProfileEvent event = UserProfileEvent.builder()
                     .userId(userId)
                     .categories(categories)
                     .difficulty(difficulty)
@@ -86,7 +86,7 @@ public class KafkaProducerService {
      * @param difficulty 난이도 레벨
      * @param categories 현재 카테고리 정보 (UserService 내부에서 조회)
      */
-    public void publishDifficultyChangeEvent(Long userId, Integer difficulty, Map<String, List<String>> categories) {
+    public void publishDifficultyChangeEvent(String userId, Integer difficulty, Map<String, List<String>> categories) {
         publishUserPreferenceEvent(userId, categories, difficulty, "DIFFICULTY");
     }
     
@@ -100,7 +100,7 @@ public class KafkaProducerService {
      * @param categories 카테고리 정보
      * @param difficulty 현재 난이도 정보 (UserService 내부에서 조회)
      */
-    public void publishCategoryChangeEvent(Long userId, Map<String, List<String>> categories, Integer difficulty) {
+    public void publishCategoryChangeEvent(String userId, Map<String, List<String>> categories, Integer difficulty) {
         publishUserPreferenceEvent(userId, categories, difficulty, "CATEGORIES");
     }
 }
