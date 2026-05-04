@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Service - 카카오 로그인</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        .login-section {
+            text-align: center;
+            margin: 40px 0;
+        }
+        .kakao-login-btn {
+            background: #FEE500;
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(254, 229, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+        .kakao-login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(254, 229, 0, 0.4);
+        }
+        .info-section {
+            margin-top: 40px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+        }
+        .endpoint-list {
+            list-style: none;
+            padding: 0;
+        }
+        .endpoint-list li {
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(76, 175, 80, 0.2);
+            border-radius: 10px;
+            border: 1px solid rgba(76, 175, 80, 0.3);
+        }
+        .profile-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            display: none;
+        }
+        .profile-section.show {
+            display: block;
+        }
+        .logout-btn {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 User Service</h1>
+        
+        <div class="status">
+            <strong>서비스 상태:</strong> <span id="serviceStatus">정상</span>
+        </div>
+
+        <div class="login-section">
+            <h2>카카오 계정으로 로그인</h2>
+            <p>간편하게 카카오 계정으로 로그인하세요</p>
+            <button class="kakao-login-btn" onclick="kakaoLogin()">
+                🟡 카카오 로그인
+            </button>
+        </div>
+
+        <div class="profile-section" id="profileSection">
+            <h3>사용자 프로필</h3>
+            <div id="userProfile">로딩 중...</div>
+            <button class="logout-btn" onclick="logout()">로그아웃</button>
+        </div>
+
+        <div class="info-section">
+            <h3>📋 사용 가능한 API 엔드포인트</h3>
+            <ul class="endpoint-list">
+                <li><strong>카카오 로그인:</strong> /oauth2/authorization/kakao</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // 카카오 로그인 - 올바른 엔드포인트 사용
+        function kakaoLogin() {
+            console.log('카카오 로그인 시작...');
+            window.location.href = '/oauth2/authorization/kakao';
+        }
+
+        // 프로필 표시 - JWT 토큰 사용
+        async function showProfile(token) {
+            try {
+                // JWT 토큰을 헤더에 포함하여 요청
+                const response = await fetch('/user/profile', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('userProfile').innerHTML = `
+                        <p><strong>이름:</strong> ${data.name || 'N/A'}</p>
+                        <p><strong>프로필 이미지:</strong> ${data.profileImage || '없음'}</p>
+                        <p><strong>제공자 ID:</strong> ${data.providerId || 'N/A'}</p>
+                    `;
+                    document.getElementById('profileSection').classList.add('show');
+                }
+            } catch (error) {
+                console.error('프로필 로드 실패:', error);
+            }
+        }
+
+        // 로그아웃
+        function logout() {
+            localStorage.removeItem('jwt_token');
+            document.getElementById('profileSection').classList.remove('show');
+            alert('로그아웃되었습니다.');
+        }
+
+        // OAuth2 로그인 성공 후 JWT 토큰 처리
+        function checkOAuth2Success() {
+            // URL에서 JWT 토큰 확인
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            
+            if (token) {
+                console.log('JWT 토큰 수신됨:', token.substring(0, 50) + '...');
+                
+                // JWT 토큰을 localStorage에 저장
+                localStorage.setItem('jwt_token', token);
+                
+                // URL에서 토큰 파라미터 제거
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, newUrl);
+                
+                // 사용자 프로필 로드
+                loadUserProfile(token);
+                
+                // 성공 메시지 표시
+                alert('카카오 로그인에 성공했습니다!');
+            } else {
+                // 저장된 토큰이 있으면 프로필 로드 시도
+                const savedToken = localStorage.getItem('jwt_token');
+                if (savedToken) {
+                    loadUserProfile(savedToken);
+                }
+            }
+        }
+        
+        // JWT 토큰으로 사용자 프로필 로드
+        async function loadUserProfile(token) {
+            try {
+                const response = await fetch('/user/profile', {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+                
+                if (response.ok) {
+                    const userData = await response.json();
+                    console.log('사용자 인증됨:', userData);
+                    
+                    // 프로필 섹션 표시
+                    showProfileSection();
+                    
+                    // 사용자 정보 표시
+                    if (userData.userId) {
+                        document.getElementById('profile-info').innerHTML = `
+                            <h3>로그인된 사용자</h3>
+                            <p><strong>사용자 ID:</strong> ${userData.userId}</p>
+                            <p><strong>이름:</strong> ${userData.name || '없음'}</p>
+                            <p><strong>프로필 이미지:</strong> ${userData.profileImage || '없음'}</p>
+                            <p><strong>난이도:</strong> ${userData.difficultyLevel || '설정되지 않음'}</p>
+                            <p><strong>생성일:</strong> ${userData.createdAt || '없음'}</p>
+                        `;
+                    }
+                    
+                    // 로그인 버튼 숨기기
+                    document.getElementById('login-section').style.display = 'none';
+                    
+                } else if (response.status === 401) {
+                    console.log('JWT 토큰이 유효하지 않음');
+                    localStorage.removeItem('jwt_token');
+                    // 로그인 섹션 표시
+                    document.getElementById('login-section').style.display = 'block';
+                    document.getElementById('profile-section').style.display = 'none';
+                }
+            } catch (error) {
+                console.log('사용자 프로필 로드 중 에러:', error);
+            }
+        }
+
+        // 프로필 섹션 표시 함수
+        function showProfileSection() {
+            document.getElementById('profile-section').style.display = 'block';
+        }
+
+        // 페이지 로드 시 OAuth2 로그인 상태 확인
+        checkOAuth2Success();
+    </script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+1. ProblemService → Kafka: Thin Event 발행
+   {"sessionId": "sess-123", "userId": "user-456"}
+
+2. LearningService → Kafka 구독: 이벤트 수신
+
+3. LearningService → ProblemService API 호출:
+   GET /api/problem/sessions/sess-123/details
+
+4. ProblemService → 원본 데이터 반환:
+   SessionDetailsResponse (세션 정보 + 문제 답변 상세)
+
+5. LearningService → 분석 수행 및 결과 저장
+
+
+남은 작업
+ProblemService에 API 엔드포인트 구현 필요
+GET /api/problem/sessions/{sessionId}/details
+GET /api/problem/users/{userId}/learning-history
+application.properties에 ProblemService URL 추가
+(선택) 자체 DB의 learning_sessions, question_answer 테이블 제거 또는 분석 결과만 저장하도록 변경
+
+1. api gate way 포트번호 8080
+
+2. UserService 8081
+
+3. ProblemService 8082
+
+4. LearningAnalysisService 8083 
+
+5. MediaService 8084
+
+6. SpeechService 8085 
+
+api gateway 서비스의 requestmapping 고정
+
+1. UserService : user
+2. problemService: problem
+3. LearningService: analysis
+4. MediaService : media
+5. SpeechService: speech
+
+
+프론트엔드 요청          →  API Gateway          →  백엔드 서비스
+─────────────────────────────────────────────────────────────
+/api/user/profile    →  /user/profile      →  user-service:8081
+/api/problem/list    →  /problem/list      →  problem-service:8081
+/api/analysis/stats  →  /analysis/stats    →  learning-service:8081
+/api/media/upload    →  /media/upload      →  media-service:8081
+/api/speech/record   →  /speech/record     →  speech-service:8081
+
+
+오늘 할일
+1. api gateway를 통해 유저 서비스로 카카오톡 소셜 로그인 성공
+
+2. 카프카 이벤트 발행 및 구독 성공( 유저 프로필 최신화), 문제 서비스에서는 유저 프로필 최신화 이벤트 구독해서 
+최신화 시 문제 요청 파라미터에 사용자 레벨, 카테고리 추가해서 요청 성공해야 함
+3. 문제 서비스에서 세션 완료 이벤트 발행 시 분석 서비스에선 이를 구독하여 사용자별 세션 분석을 완료하고 이벤트 발행
+
+4. 문제 서비스에선 이를 다시 구독해서 사용자 분석 내용을 추후 문제 할당 로직에 포함하여 문제 할당을 실행
+5. 세션 완료 이벤트는 미디어 서비스도 구독해서 사용자 관심사 관련 미디어를 추천해줘야함 
+6. 롤 플레잉은 확인해봐야
+
+
+11/14 
+-------------------------------------------------------------------------------------------
+진행도
+1.docker compose에 있는 DB, Kafka, Redis 등 공용 docker compose에 일괄 정의 (외부 컨테이너 네트워크 연결로 통신)
+
+2. 각각 서비스들의 docker compose 작성을 손보고 추후 RDS 사용할것이기 때문에 각각의 db, user, password의 변수 네이밍 컨벤션이 중요함.
+
+3. 완전히 독립적인 서비스 실행이 되고 모든 서비스들의 기능이 정상적으로 작동 된 후 k8s, ci/cd 계획 진행하면 됨 
+
+4. 각각의 서비스 docker compose에 선언된 환경변수들의 출처와 이게 뭔지 좀 찾아봐야함 
+

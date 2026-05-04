@@ -1,0 +1,43 @@
+services:
+  user-service-app:
+    build: .
+    container_name: user-service-app
+    ports:
+      - "8081:8080"
+    mem_limit: 512m
+    memswap_limit: 512m
+    environment:
+      # Spring Profile 설정: docker 프로파일 활성화 → application-docker.properties 파일 사용
+      - SPRING_PROFILES_ACTIVE=docker
+      # MySQL 연결 (API Gateway의 공통 DB)
+      - SPRING_DATASOURCE_URL=jdbc:mysql://user_service_db:3306/user_service_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
+      - SPRING_DATASOURCE_USERNAME=user_service_user
+      - SPRING_DATASOURCE_PASSWORD=user_service_password
+      # Redis 연결 (API Gateway의 공통 Redis)
+      - SPRING_REDIS_HOST=redis
+      - SPRING_REDIS_PORT=6379
+      # Kafka 연결 (API Gateway의 공통 Kafka)
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      # Kakao OAuth2 설정
+      - KAKAO_API_KEY_USER_SERVICE=${KAKAO_API_KEY_USER_SERVICE:-your-kakao-client-id}
+      - KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET:-your-kakao-client-secret}
+      # OAuth2 Redirect URI 설정 (API Gateway를 통한 경로)
+      - OAUTH2_REDIRECT_URI=${OAUTH2_REDIRECT_URI:-http://localhost:8080/api/auth/oauth2/callback/kakao}
+      # 프론트엔드 URL 설정
+      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-http://localhost:5173/}
+      # JWT 시크릿 키 (API Gateway와 동일한 값 사용 필수!)
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-this-in-production-minimum-256-bits}
+    networks:
+      - english-compass-network  # API Gateway와 공통 인프라 서비스들과 통신
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+networks:
+  english-compass-network:
+    external: true
+    name: english-compass-network
